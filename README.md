@@ -1,5 +1,4 @@
 <p align="center">
-  <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=Modern+sleek+cloud+hosting+control+panel+dashboard+with+server+racks+and+network+visualization+professional+design+clean+minimalist+style&image_size=landscape_16_9" alt="StarIDC Banner" width="100%">
 </p>
 
 <h1 align="center">🌟 StarIDC</h1>
