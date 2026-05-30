@@ -82,7 +82,7 @@
 | Web 服务器 | Apache / Nginx         |
 | PHP     | 7.4+（需 PDO、GD、cURL 扩展） |
 | MySQL   | 5.6+ / MariaDB 10.0+   |
-| 宝塔面板    | 任意版本（需安装 MNBT 插件）      |
+| 宝塔面板    | 任意版本（需部署 梦奈宝塔mnbt系统）      |
 
 ### 安装步骤
 
@@ -255,6 +255,6 @@ staridc/
 ***
 
 <p align="center">
-  <b>StarIDC</b> — 让虚拟主机分销更简单<br>
+  <b>StarIDC</b> — 仰望星辰工作室出品<br>
   <sub>Built with ❤️ for the open-source community</sub>
 </p>
