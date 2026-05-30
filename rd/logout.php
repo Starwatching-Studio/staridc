@@ -8,5 +8,5 @@ if (isLogin()) {
 }
 session_destroy();
 $_SESSION = [];
-$base = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+$base = rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/\\');
 redirect($base . '/index.php');
