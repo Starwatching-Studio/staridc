@@ -53,6 +53,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     last_sign_date DATE NULL,
                     last_login_time DATETIME NULL,
                     last_login_ip VARCHAR(45) NULL,
+                    login_attempts INT DEFAULT 0,
+                    locked_until DATETIME NULL,
+                    invite_code VARCHAR(20) NULL,
+                    invited_by INT NULL,
+                    referral_count INT DEFAULT 0,
+                    remember_token VARCHAR(64) NULL,
                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
@@ -103,6 +109,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     UNIQUE KEY uk_ip_date (ip, visit_date)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+                $pdo->exec("CREATE TABLE IF NOT EXISTS referral_logs (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    referrer_id INT NOT NULL,
+                    referred_id INT NOT NULL,
+                    reward_points INT NOT NULL DEFAULT 0,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (referrer_id) REFERENCES users(id) ON DELETE CASCADE,
+                    FOREIGN KEY (referred_id) REFERENCES users(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                $pdo->exec("CREATE TABLE IF NOT EXISTS coupons (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    code VARCHAR(32) NOT NULL UNIQUE,
+                    discount INT NOT NULL DEFAULT 0,
+                    status TINYINT NOT NULL DEFAULT 0,
+                    used_by INT NULL,
+                    used_at DATETIME NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
                 $pdo->exec("CREATE TABLE IF NOT EXISTS verify_codes (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     account VARCHAR(100) NOT NULL,
@@ -119,10 +145,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'pay_api_url' => '', 'pay_pid' => '', 'pay_key' => '',
                     'mail_host' => '', 'mail_port' => '465', 'mail_user' => '', 'mail_pass' => '',
                     'mail_name' => $siteName, 'mail_security' => 'ssl', 'mail_enabled' => '0',
+                    'mail_whitelist' => '',
                     'mail_notify_host' => '1', 'mail_notify_points' => '1', 'mail_notify_expire' => '1', 'cron_key' => '',
                     'sign_min' => '50', 'sign_max' => '100',
                     'theme' => 'nomorphism',
                     'announcement' => '',
+                    'referral_enabled' => '1', 'referral_reward_points' => '30',
+                    'register_points_enabled' => '1', 'register_points' => '100',
                     'points_200_price' => '10', 'points_400_price' => '18',
                     'points_1000_price' => '40', 'points_3000_price' => '100',
                 ];
