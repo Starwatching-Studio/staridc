@@ -148,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'mail_whitelist' => '',
                     'mail_notify_host' => '1', 'mail_notify_points' => '1', 'mail_notify_expire' => '1', 'cron_key' => '',
                     'sign_min' => '50', 'sign_max' => '100',
-                    'theme' => 'nomorphism',
+                    'theme' => '清新薄荷主题',
                     'announcement' => '',
                     'referral_enabled' => '1', 'referral_reward_points' => '30',
                     'register_points_enabled' => '1', 'register_points' => '100',

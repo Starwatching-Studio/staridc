@@ -125,6 +125,7 @@ $vhostList = $vhosts->fetchAll();
 
 $today = date('Y-m-d');
 $canSign = $user['last_sign_date'] !== $today;
+$signEnabled = intval(conf('sign_min', '50')) > 0;
 
 // 获取推荐码，如果没有则生成
 $inviteCode = $user['invite_code'] ?? '';
@@ -153,6 +154,15 @@ renderHeader('个人中心');
             <div class="user-name"><?php echo h($user['nickname']); ?></div>
             <div class="user-email"><?php echo h($user['email']); ?></div>
             <div class="user-points">💰 <?php echo $user['points']; ?> 积分</div>
+            <?php if ($canSign && $signEnabled): ?>
+            <form method="post" class="quick-sign-form">
+                <input type="hidden" name="action" value="sign">
+                <button type="submit" class="quick-sign-btn">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/></svg>
+                    每日签到领积分
+                </button>
+            </form>
+            <?php endif; ?>
         </div>
         <nav class="panel-nav">
             <a href="#" class="panel-nav-item active" onclick="showPanel('info')">个人信息</a>
@@ -377,6 +387,10 @@ function shareToFriend() {
 .section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
 .badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:.75rem;font-weight:600;background:#667eea;color:#fff}
 .badge-success{background:#10b981;color:#fff}
+.quick-sign-form{margin-top:16px}
+.quick-sign-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px 16px;border:none;border-radius:var(--radius-sm);background:var(--gradient-accent);color:#fff;font-size:.92rem;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(45,139,107,.3);transition:all var(--transition)}
+.quick-sign-btn:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(45,139,107,.4)}
+.quick-sign-btn:active{transform:translateY(0)}
 </style>
 
 <script>
