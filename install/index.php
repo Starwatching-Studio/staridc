@@ -191,7 +191,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt3->execute([$adminUser, $hashedPwd]);
 
                 $configContent = "<?php\n\$dbconfig=array(\n\t'host' => '".addslashes($dbHost)."',\n\t'port' => {$dbPort},\n\t'user' => '".addslashes($dbUser)."',\n\t'pwd' => '".addslashes($dbPwd)."',\n\t'dbname' => '".addslashes($dbName)."',\n);\n?>";
-                file_put_contents(ROOT . 'config.php', $configContent);
+                $written = @file_put_contents(ROOT . 'config.php', $configContent);
+                if ($written === false) {
+                    throw new Exception('无法写入配置文件 config.php，请确保项目根目录有写入权限（chmod 755 或在宝塔面板设置目录权限为 755、所有者为 www）。配置内容如下，您也可手动创建 config.php 文件并粘贴：<br><br><pre style="background:#f5f5f5;padding:10px;border-radius:5px;white-space:pre-wrap;word-break:break-all">'.htmlspecialchars($configContent).'</pre>');
+                }
 
                 $success = '安装成功！正在跳转到首页...';
                 $step = 3;

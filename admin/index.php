@@ -668,8 +668,8 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 <div style="font-size:.85rem;color:var(--gray-500);margin-top:4px">
 <?php try { $sc=$DB->query("SELECT COUNT(*) as c FROM mnbt_servers")->fetch()['c']; } catch(Exception $e) { $sc=0; } ?>
 当前已配置 <strong style="color:var(--primary-solid)"><?php echo $sc; ?></strong> 台MNBT服务器，可给不同主机型号分配不同服务器
-<?php if($sc==0 && !conf('mnbt_api_url')): ?>
-<br><span style="color:var(--danger)"><i class="fas fa-exclamation-triangle"></i> 未检测到服务器配置，请先点击右侧按钮添加或运行 upgrade.php</span>
+<?php if($sc==0): ?>
+<br><span style="color:var(--danger)"><i class="fas fa-exclamation-triangle"></i> <?php if(conf('mnbt_api_url')): ?>检测到旧版MNBT配置，请运行 upgrade.php 迁移为多服务器配置<?php else: ?>尚未添加任何MNBT服务器，请点击右侧按钮添加<?php endif; ?></span>
 <?php endif; ?>
 </div>
 </div>
