@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="./README_EN.md">English</a> | 中文
+</p>
+
 <p align="center">
 </p>
 
