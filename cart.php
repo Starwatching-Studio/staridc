@@ -71,7 +71,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn) {
                     $account = genVhostAccount($user['id'], $modelId);
                     $password = genVhostPassword();
                     $expireDate = date('Y-m-d', strtotime('+30 days'));
-                    $mnbtResult = MNBT_API::openHost($account, $password, $model['web_space'], $model['db_space'], $model['flow'], $model['domain_limit'], $expireDate);
+                    $server = getServer($model['server_id']);
+                    $mnbtResult = MNBT_API::openHost($account, $password, $model['web_space'], $model['db_space'], $model['flow'], $model['domain_limit'], $expireDate, $server);
                     if ($mnbtResult['success']) {
                         if ($couponId) {
                             $cpStmt = $DB->prepare("UPDATE coupons SET status=1, used_by=?, used_at=NOW() WHERE id=? AND status=0");
@@ -80,8 +81,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn) {
                         $stmt2 = $DB->prepare("UPDATE users SET points=points-? WHERE id=?");
                         $stmt2->execute([$finalPrice, $user['id']]);
                         $expireTime = date('Y-m-d H:i:s', strtotime('+30 days'));
-                        $stmt3 = $DB->prepare("INSERT INTO vhosts(user_id,model_id,account,password,mnbt_opened,expire_time) VALUES(?,?,?,?,1,?)");
-                        $stmt3->execute([$user['id'], $modelId, $account, $password, $expireTime]);
+                        $stmt3 = $DB->prepare("INSERT INTO vhosts(user_id,model_id,account,password,mnbt_opened,expire_time,server_id) VALUES(?,?,?,?,1,?,?)");
+                        $stmt3->execute([$user['id'], $modelId, $account, $password, $expireTime, $model['server_id']]);
                         $discountInfo = $couponDiscount ? "（优惠码省了 " . ($model['price'] - $finalPrice) . " 积分）" : "";
                         $success = '主机开通成功！账号：' . h($account) . $discountInfo;
                         $user = getUser();

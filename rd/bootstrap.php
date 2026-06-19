@@ -63,6 +63,16 @@ function setConf($key, $value) {
     $stmt->execute([$key, $value, $value]);
 }
 
+// 根据 server_id 获取 MNBT 服务器配置，返回 null 则回退到旧版 config
+function getServer($serverId) {
+    if (empty($serverId)) return null;
+    global $DB;
+    $stmt = $DB->prepare("SELECT * FROM mnbt_servers WHERE id=? AND status=1");
+    $stmt->execute([$serverId]);
+    $server = $stmt->fetch();
+    return $server ?: null;
+}
+
 function getTheme() {
     $t = conf('theme', 'nomorphism');
     if (!is_dir(THEME_ROOT . $t)) $t = 'nomorphism';

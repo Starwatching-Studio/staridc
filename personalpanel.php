@@ -62,7 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $baseTime = strtotime($vhost['expire_time']) > time() ? $vhost['expire_time'] : date('Y-m-d H:i:s');
             $newExpire = date('Y-m-d', strtotime($baseTime . ' +30 days'));
-            $mnbtResult = MNBT_API::renewHost($vhost['account'], $newExpire);
+            $server = getServer($vhost['server_id']);
+            $mnbtResult = MNBT_API::renewHost($vhost['account'], $newExpire, $server);
             if ($mnbtResult['success']) {
                 $stmt2 = $DB->prepare("UPDATE users SET points=points-? WHERE id=?");
                 $stmt2->execute([$vhost['price'], $user['id']]);
@@ -79,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'mnbt_login') {
         $vhostId = intval($_POST['vhost_id'] ?? 0);
-        $stmt = $DB->prepare("SELECT account,password,mnbt_opened FROM vhosts WHERE id=? AND user_id=?");
+        $stmt = $DB->prepare("SELECT account,password,mnbt_opened,server_id FROM vhosts WHERE id=? AND user_id=?");
         $stmt->execute([$vhostId, $user['id']]);
         $vhost = $stmt->fetch();
         if (!$vhost) {
@@ -87,7 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!$vhost['mnbt_opened']) {
             $error = '主机未开通，无法登录';
         } else {
-            $apiUrl = conf('mnbt_api_url', '');
+            $server = getServer($vhost['server_id']);
+            $apiUrl = $server ? $server['api_url'] : conf('mnbt_api_url', '');
             if (empty($apiUrl)) {
                 $error = 'MNBT接口未配置';
             } else {
@@ -95,11 +97,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $baseUrl = ($parsed['scheme'] ?? 'https') . '://' . ($parsed['host'] ?? '');
                 if (!empty($parsed['port'])) $baseUrl .= ':' . $parsed['port'];
                 $loginUrl = $baseUrl . '/user/idcdl.php?GN=LOGINE';
+                $mnVs = $server ? ($server['mn_vs'] ?? '16') : conf('mnbt_vs', '16');
                 renderHeader('正在跳转到MNBT控制面板...');
                 echo '<form id="mnbt_login_form" method="post" action="' . h($loginUrl) . '">';
                 echo '<input type="hidden" name="USERNAME" value="' . h($vhost['account']) . '">';
                 echo '<input type="hidden" name="PASSWORD" value="' . h($vhost['password']) . '">';
-                echo '<input type="hidden" name="MN_VS" value="' . h(conf('mnbt_vs', '16')) . '">';
+                echo '<input type="hidden" name="MN_VS" value="' . h($mnVs) . '">';
                 echo '</form>';
                 echo '<p style="text-align:center;padding:40px;">正在自动登录MNBT控制面板...</p>';
                 echo '<script>document.getElementById("mnbt_login_form").submit();</script>';

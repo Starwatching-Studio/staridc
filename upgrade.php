@@ -135,6 +135,51 @@ if ($authorized) {
             }
         }
 
+        // === 4. 多MNBT服务器支持：创建 mnbt_servers 表 ===
+        if (!in_array('mnbt_servers', $tables)) {
+            $pdo->exec("CREATE TABLE mnbt_servers (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                api_url VARCHAR(255) NOT NULL,
+                mn_bh VARCHAR(50) NOT NULL DEFAULT '',
+                mn_key VARCHAR(255) NOT NULL DEFAULT '',
+                mn_keye VARCHAR(255) NOT NULL DEFAULT '',
+                mn_vs VARCHAR(20) NOT NULL DEFAULT '16',
+                status TINYINT NOT NULL DEFAULT 1,
+                sort_order INT NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $logs[] = "✅ 已创建表：mnbt_servers";
+        } else {
+            $logs[] = "⏭️ 表已存在：mnbt_servers";
+        }
+
+        // === 5. vhost_models 表添加 server_id 字段 ===
+        $stmt = $pdo->query("SHOW COLUMNS FROM vhost_models");
+        $vmCols = [];
+        while ($row = $stmt->fetch()) {
+            $vmCols[] = $row['Field'];
+        }
+        if (!in_array('server_id', $vmCols)) {
+            $pdo->exec("ALTER TABLE vhost_models ADD COLUMN server_id INT NULL DEFAULT NULL");
+            $logs[] = "✅ vhost_models 表已添加字段：server_id";
+        } else {
+            $logs[] = "⏭️ vhost_models 表字段已存在：server_id";
+        }
+
+        // === 6. vhosts 表添加 server_id 字段 ===
+        $stmt = $pdo->query("SHOW COLUMNS FROM vhosts");
+        $vhCols = [];
+        while ($row = $stmt->fetch()) {
+            $vhCols[] = $row['Field'];
+        }
+        if (!in_array('server_id', $vhCols)) {
+            $pdo->exec("ALTER TABLE vhosts ADD COLUMN server_id INT NULL DEFAULT NULL");
+            $logs[] = "✅ vhosts 表已添加字段：server_id";
+        } else {
+            $logs[] = "⏭️ vhosts 表字段已存在：server_id";
+        }
+
         $success = '数据库升级完成！共执行 ' . count($logs) . ' 项操作。';
     } catch (Exception $e) {
         $error = '升级失败：' . $e->getMessage();

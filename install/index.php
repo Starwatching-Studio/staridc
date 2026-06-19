@@ -71,7 +71,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     domain_limit INT NOT NULL DEFAULT 5,
                     price INT NOT NULL DEFAULT 0,
                     status TINYINT NOT NULL DEFAULT 1,
-                    sort_order INT NOT NULL DEFAULT 0
+                    sort_order INT NOT NULL DEFAULT 0,
+                    server_id INT NULL DEFAULT NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
                 $pdo->exec("CREATE TABLE IF NOT EXISTS vhosts (
@@ -83,9 +84,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     mnbt_opened TINYINT NOT NULL DEFAULT 0,
                     expire_time DATETIME NULL,
                     expire_warned TINYINT(1) NOT NULL DEFAULT 0,
+                    server_id INT NULL DEFAULT NULL,
                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                     FOREIGN KEY (model_id) REFERENCES vhost_models(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                $pdo->exec("CREATE TABLE IF NOT EXISTS mnbt_servers (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL,
+                    api_url VARCHAR(255) NOT NULL,
+                    mn_bh VARCHAR(50) NOT NULL DEFAULT '',
+                    mn_key VARCHAR(255) NOT NULL DEFAULT '',
+                    mn_keye VARCHAR(255) NOT NULL DEFAULT '',
+                    mn_vs VARCHAR(20) NOT NULL DEFAULT '16',
+                    status TINYINT NOT NULL DEFAULT 1,
+                    sort_order INT NOT NULL DEFAULT 0,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
                 $pdo->exec("CREATE TABLE IF NOT EXISTS orders (

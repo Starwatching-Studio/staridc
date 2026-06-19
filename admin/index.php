@@ -119,8 +119,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             break;
         case 'add_model':
-            $stmt = $DB->prepare("INSERT INTO vhost_models(name,web_space,db_space,flow,domain_limit,price,sort_order) VALUES(?,?,?,?,?,?,?)");
-            $stmt->execute([$_POST['name'],intval($_POST['web_space']),intval($_POST['db_space']),intval($_POST['flow']),intval($_POST['domain_limit']),intval($_POST['price']),intval($_POST['sort_order'])]);
+            $serverId = !empty($_POST['server_id']) ? intval($_POST['server_id']) : null;
+            $stmt = $DB->prepare("INSERT INTO vhost_models(name,web_space,db_space,flow,domain_limit,price,sort_order,server_id) VALUES(?,?,?,?,?,?,?,?)");
+            $stmt->execute([$_POST['name'],intval($_POST['web_space']),intval($_POST['db_space']),intval($_POST['flow']),intval($_POST['domain_limit']),intval($_POST['price']),intval($_POST['sort_order']),$serverId]);
             $msg = '型号添加成功'; $msgType = 'success';
             break;
         case 'toggle_model':
@@ -129,9 +130,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = '操作成功'; $msgType = 'success';
             break;
         case 'del_model':
-            $stmt = $DB->prepare("DELETE FROM vhost_models WHERE id=?");
-            $stmt->execute([intval($_POST['id'])]);
-            $msg = '型号已删除'; $msgType = 'success';
+            $mid = intval($_POST['id']);
+            $chk = $DB->prepare("SELECT COUNT(*) as c FROM vhosts WHERE model_id=?");
+            $chk->execute([$mid]);
+            if ($chk->fetch()['c'] > 0) {
+                $msg = '该型号下还有主机，无法删除，请先删除相关主机'; $msgType = 'error';
+            } else {
+                $stmt = $DB->prepare("DELETE FROM vhost_models WHERE id=?");
+                $stmt->execute([$mid]);
+                $msg = '型号已删除'; $msgType = 'success';
+            }
             break;
         case 'del_vhost':
             $vid = intval($_POST['id']);
@@ -139,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $vstmt->execute([$vid]);
             $vh = $vstmt->fetch();
             if ($vh && $vh['mnbt_opened']) {
-                MNBT_API::deleteHost($vh['account']);
+                MNBT_API::deleteHost($vh['account'], getServer($vh['server_id']));
             }
             $stmt = $DB->prepare("DELETE FROM vhosts WHERE id=?");
             $stmt->execute([$vid]);
@@ -155,7 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $vstmt->execute([$vid]);
                 $vh = $vstmt->fetch();
                 if ($vh && $vh['mnbt_opened']) {
-                    MNBT_API::deleteHost($vh['account']);
+                    MNBT_API::deleteHost($vh['account'], getServer($vh['server_id']));
                 }
                 $stmt = $DB->prepare("DELETE FROM vhosts WHERE id=?");
                 $stmt->execute([$vid]);
@@ -237,6 +245,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             loadConfig();
             $msg = '公告已保存'; $msgType = 'success';
             break;
+        case 'add_server':
+            $stmt = $DB->prepare("INSERT INTO mnbt_servers(name,api_url,mn_bh,mn_key,mn_keye,mn_vs,status,sort_order) VALUES(?,?,?,?,?,?,1,0)");
+            $stmt->execute([trim($_POST['name']),trim($_POST['api_url']),trim($_POST['mn_bh']),trim($_POST['mn_key']),trim($_POST['mn_keye']),trim($_POST['mn_vs'] ?? '16')]);
+            $msg = '服务器添加成功'; $msgType = 'success';
+            break;
+        case 'del_server':
+            $stmt = $DB->prepare("DELETE FROM mnbt_servers WHERE id=?");
+            $stmt->execute([intval($_POST['id'])]);
+            $msg = '服务器已删除'; $msgType = 'success';
+            break;
+        case 'toggle_server':
+            $stmt = $DB->prepare("UPDATE mnbt_servers SET status=? WHERE id=?");
+            $stmt->execute([intval($_POST['status']),intval($_POST['id'])]);
+            $msg = '操作成功'; $msgType = 'success';
+            break;
+        case 'edit_server':
+            $sid = intval($_POST['id']);
+            $stmt = $DB->prepare("UPDATE mnbt_servers SET name=?,api_url=?,mn_bh=?,mn_key=?,mn_keye=?,mn_vs=? WHERE id=?");
+            $stmt->execute([trim($_POST['name']),trim($_POST['api_url']),trim($_POST['mn_bh']),trim($_POST['mn_key']),trim($_POST['mn_keye']),trim($_POST['mn_vs'] ?? '16'),$sid]);
+            $msg = '服务器已更新'; $msgType = 'success';
+            break;
+        case 'test_server':
+            $sid = intval($_POST['id']);
+            $sstmt = $DB->prepare("SELECT * FROM mnbt_servers WHERE id=?");
+            $sstmt->execute([$sid]);
+            $sv = $sstmt->fetch();
+            if ($sv) {
+                $r = MNBT_API::testConnection($sv);
+                $msg = $r['message']; $msgType = $r['success'] ? 'success' : 'error';
+            } else {
+                $msg = '服务器不存在'; $msgType = 'error';
+            }
+            break;
     }
 }
 
@@ -244,12 +285,13 @@ $totalUsers = $DB->query("SELECT COUNT(*) as c FROM users")->fetch()['c'];
 $totalVhosts = $DB->query("SELECT COUNT(*) as c FROM vhosts")->fetch()['c'];
 $todayVisits = $DB->query("SELECT COUNT(*) as c FROM visit_logs WHERE visit_date=CURDATE()")->fetch()['c'];
 $totalOrders = $DB->query("SELECT COUNT(*) as c FROM orders WHERE status=1")->fetch()['c'];
-$pages = ['dashboard','config','vhost_models','vhosts','users','prices','announcement','statistics'];
+$pages = ['dashboard','config','servers','vhost_models','vhosts','users','prices','announcement','statistics'];
 if (!in_array($page, $pages)) $page = 'dashboard';
 
 $pageTitles = [
     'dashboard' => ['icon' => 'fa-chart-pie', 'title' => '仪表盘', 'desc' => '系统数据总览'],
     'config' => ['icon' => 'fa-cog', 'title' => '系统配置', 'desc' => '网站参数设置'],
+    'servers' => ['icon' => 'fa-server', 'title' => '服务器管理', 'desc' => 'MNBT多服务器配置'],
     'vhost_models' => ['icon' => 'fa-cube', 'title' => '主机型号', 'desc' => '产品套餐管理'],
     'vhosts' => ['icon' => 'fa-server', 'title' => '虚拟主机', 'desc' => '用户主机列表'],
     'users' => ['icon' => 'fa-users', 'title' => '用户管理', 'desc' => '会员信息管理'],
@@ -550,7 +592,8 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 </li>
 <li class="status-item">
 <span class="label"><i class="fas fa-plug"></i> MNBT对接</span>
-<span class="value <?php echo conf('mnbt_api_url')?'success':'warning'; ?>"><?php echo conf('mnbt_api_url')?'已配置':'未配置'; ?></span>
+<?php try { $serverCount=$DB->query("SELECT COUNT(*) as c FROM mnbt_servers")->fetch()['c']; } catch(Exception $e) { $serverCount=0; } ?>
+<span class="value <?php echo (conf('mnbt_api_url')||$serverCount>0)?'success':'warning'; ?>"><?php echo $serverCount>0?$serverCount.'台服务器':(conf('mnbt_api_url')?'默认配置':'未配置'); ?></span>
 </li>
 <li class="status-item">
 <span class="label"><i class="fas fa-credit-card"></i> 支付接口</span>
@@ -582,8 +625,11 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 <div id="tab-mnbt" class="tab-content active">
 <div class="card">
 <div class="card-header">
-<h3 class="card-title"><i class="fas fa-server"></i> MNBT 对接配置</h3>
+<h3 class="card-title"><i class="fas fa-server"></i> MNBT 对接配置（默认服务器）</h3>
 </div>
+<p style="padding:0 20px;color:var(--gray-500);font-size:.85rem;margin-bottom:12px">
+<i class="fas fa-info-circle"></i> 此处为默认 MNBT 配置，未指定服务器的型号将使用此配置。
+</p>
 <div class="form-row">
 <div class="form-group">
 <label class="form-label">API地址</label>
@@ -614,6 +660,20 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 <button type="button" class="btn btn-outline" onclick="this.form.action.value='test_mnbt';this.form.submit()"><i class="fas fa-plug"></i> 测试连接</button>
 <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存配置</button>
 </div>
+</div>
+
+<div style="margin:20px;padding:20px;border-radius:12px;background:linear-gradient(135deg,#667eea15,#764ba215);border:1px solid var(--primary-solid);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+<div>
+<div style="font-weight:700;font-size:1rem;color:var(--dark)"><i class="fas fa-network-wired" style="color:var(--primary-solid);margin-right:8px"></i>多服务器管理</div>
+<div style="font-size:.85rem;color:var(--gray-500);margin-top:4px">
+<?php try { $sc=$DB->query("SELECT COUNT(*) as c FROM mnbt_servers")->fetch()['c']; } catch(Exception $e) { $sc=0; } ?>
+当前已配置 <strong style="color:var(--primary-solid)"><?php echo $sc; ?></strong> 台MNBT服务器，可给不同主机型号分配不同服务器
+<?php if($sc==0 && !conf('mnbt_api_url')): ?>
+<br><span style="color:var(--danger)"><i class="fas fa-exclamation-triangle"></i> 未检测到服务器配置，请先点击右侧按钮添加或运行 upgrade.php</span>
+<?php endif; ?>
+</div>
+</div>
+<a href="?page=servers" class="btn btn-primary"><i class="fas fa-plus-circle"></i> 管理服务器</a>
 </div>
 </div>
 
@@ -785,6 +845,175 @@ document.getElementById('themeInput').value=name;
 </script>
 <?php endif; ?>
 
+<!-- 服务器管理 -->
+<?php if($page==='servers'): ?>
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-plus-circle"></i> 添加MNBT服务器</h3>
+</div>
+<form method="post" class="form-row">
+<input type="hidden" name="action" value="add_server">
+<div class="form-group" style="flex:1.5">
+<label class="form-label">服务器名称</label>
+<input type="text" name="name" required class="form-control" placeholder="如：香港节点">
+</div>
+<div class="form-group" style="flex:2">
+<label class="form-label">API地址</label>
+<input type="text" name="api_url" required class="form-control" placeholder="http://xxx/api/api.php">
+</div>
+<div class="form-group">
+<label class="form-label">宝塔编号 (mn_bh)</label>
+<input type="text" name="mn_bh" class="form-control">
+</div>
+<div class="form-group">
+<label class="form-label">API秘钥 (mn_key)</label>
+<input type="text" name="mn_key" class="form-control">
+</div>
+<div class="form-group">
+<label class="form-label">宝塔调用秘钥 (mn_keye)</label>
+<input type="text" name="mn_keye" class="form-control">
+</div>
+<div class="form-group" style="flex:0.5">
+<label class="form-label">插件版本 (mn_vs)</label>
+<input type="text" name="mn_vs" value="16" class="form-control">
+</div>
+<div style="display:flex;align-items:flex-end">
+<button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> 添加</button>
+</div>
+</form>
+</div>
+
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-server"></i> 服务器列表</h3>
+</div>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>名称</th>
+<th>API地址</th>
+<th>宝塔编号</th>
+<th>VS</th>
+<th>状态</th>
+<th>操作</th>
+</tr>
+</thead>
+<tbody>
+<?php try { $servers=$DB->query("SELECT * FROM mnbt_servers ORDER BY sort_order,id")->fetchAll(); } catch(Exception $e) { $servers=[]; } foreach($servers as $srv): ?>
+<tr>
+<td><?php echo $srv['id']; ?></td>
+<td><strong><?php echo h($srv['name']); ?></strong></td>
+<td style="font-size:.85rem;color:var(--gray-500)"><?php echo h($srv['api_url']); ?></td>
+<td><?php echo h($srv['mn_bh']); ?></td>
+<td><?php echo h($srv['mn_vs']); ?></td>
+<td>
+<?php if($srv['status']): ?>
+<span class="badge badge-success"><i class="fas fa-check"></i> 启用</span>
+<?php else: ?>
+<span class="badge badge-danger"><i class="fas fa-times"></i> 禁用</span>
+<?php endif; ?>
+</td>
+<td>
+<button type="button" class="btn btn-sm btn-outline" onclick="editServer(<?php echo htmlspecialchars(json_encode($srv), ENT_QUOTES, 'UTF-8'); ?>)"><i class="fas fa-edit"></i> 编辑</button>
+<form method="post" style="display:inline">
+<input type="hidden" name="action" value="test_server">
+<input type="hidden" name="id" value="<?php echo $srv['id']; ?>">
+<button type="submit" class="btn btn-sm btn-outline"><i class="fas fa-plug"></i> 测试</button>
+</form>
+<form method="post" style="display:inline">
+<input type="hidden" name="action" value="toggle_server">
+<input type="hidden" name="id" value="<?php echo $srv['id']; ?>">
+<input type="hidden" name="status" value="<?php echo $srv['status']?0:1; ?>">
+<button type="submit" class="btn btn-sm <?php echo $srv['status']?'btn-outline':'btn-success'; ?>">
+<?php echo $srv['status']?'禁用':'启用'; ?>
+</button>
+</form>
+<form method="post" style="display:inline" onsubmit="return confirm('确定删除此服务器？已绑定此服务器的型号将回退到默认配置')">
+<input type="hidden" name="action" value="del_server">
+<input type="hidden" name="id" value="<?php echo $srv['id']; ?>">
+<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+</form>
+</td>
+</tr>
+<?php endforeach; ?>
+<?php if(empty($servers)): ?>
+<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--gray-500)">
+<i class="fas fa-inbox" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>
+暂无服务器，未配置服务器的型号将使用「系统配置」中的默认MNBT配置
+</td></tr>
+<?php endif; ?>
+</tbody>
+</table>
+</div>
+</div>
+
+<!-- 编辑服务器弹窗 -->
+<div id="editServerOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9999;backdrop-filter:blur(4px)" onclick="closeEditServer()"></div>
+<div id="editServerModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10000;width:500px;max-width:92vw;background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200)">
+<h3 style="margin:0;font-size:1.15rem"><i class="fas fa-edit" style="color:var(--primary-solid);margin-right:8px"></i>编辑服务器</h3>
+<button type="button" onclick="closeEditServer()" style="background:none;border:none;font-size:1.6rem;cursor:pointer;color:var(--gray-500);line-height:1">&times;</button>
+</div>
+<form method="post" style="padding:20px 24px">
+<input type="hidden" name="action" value="edit_server">
+<input type="hidden" name="id" id="editSrvId">
+<div class="form-group" style="margin-bottom:16px">
+<label class="form-label">服务器名称</label>
+<input type="text" name="name" id="editSrvName" required class="form-control">
+</div>
+<div class="form-group" style="margin-bottom:16px">
+<label class="form-label">API地址</label>
+<input type="text" name="api_url" id="editSrvApiUrl" required class="form-control" placeholder="http://xxx/api/api.php">
+</div>
+<div class="form-row" style="margin-bottom:16px">
+<div class="form-group">
+<label class="form-label">宝塔编号 (mn_bh)</label>
+<input type="text" name="mn_bh" id="editSrvBh" class="form-control">
+</div>
+<div class="form-group">
+<label class="form-label">API秘钥 (mn_key)</label>
+<input type="text" name="mn_key" id="editSrvKey" class="form-control">
+</div>
+</div>
+<div class="form-row" style="margin-bottom:16px">
+<div class="form-group">
+<label class="form-label">宝塔调用秘钥 (mn_keye)</label>
+<input type="text" name="mn_keye" id="editSrvKeye" class="form-control">
+</div>
+<div class="form-group" style="flex:0.5">
+<label class="form-label">插件版本 (mn_vs)</label>
+<input type="text" name="mn_vs" id="editSrvVs" value="16" class="form-control">
+</div>
+</div>
+<div style="display:flex;gap:10px;justify-content:flex-end">
+<button type="button" class="btn btn-outline" onclick="closeEditServer()">取消</button>
+<button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存修改</button>
+</div>
+</form>
+</div>
+<script>
+function editServer(srv){
+    document.getElementById('editSrvId').value = srv.id;
+    document.getElementById('editSrvName').value = srv.name;
+    document.getElementById('editSrvApiUrl').value = srv.api_url;
+    document.getElementById('editSrvBh').value = srv.mn_bh;
+    document.getElementById('editSrvKey').value = srv.mn_key;
+    document.getElementById('editSrvKeye').value = srv.mn_keye;
+    document.getElementById('editSrvVs').value = srv.mn_vs;
+    document.getElementById('editServerOverlay').style.display = 'block';
+    document.getElementById('editServerModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+function closeEditServer(){
+    document.getElementById('editServerOverlay').style.display = 'none';
+    document.getElementById('editServerModal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+</script>
+<?php endif; ?>
+
 <!-- 主机型号 -->
 <?php if($page==='vhost_models'): ?>
 <div class="card">
@@ -821,6 +1050,15 @@ document.getElementById('themeInput').value=name;
 <label class="form-label">排序</label>
 <input type="number" name="sort_order" value="0" class="form-control">
 </div>
+<div class="form-group">
+<label class="form-label">MNBT服务器</label>
+<select name="server_id" class="form-control">
+<option value="">默认配置</option>
+<?php try { $srvs=$DB->query("SELECT * FROM mnbt_servers ORDER BY sort_order,id")->fetchAll(); } catch(Exception $e) { $srvs=[]; } foreach($srvs as $srv): ?>
+<option value="<?php echo $srv['id']; ?>"><?php echo h($srv['name']); ?></option>
+<?php endforeach; ?>
+</select>
+</div>
 <div style="display:flex;align-items:flex-end">
 <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> 添加</button>
 </div>
@@ -842,12 +1080,13 @@ document.getElementById('themeInput').value=name;
 <th>流量</th>
 <th>域名数</th>
 <th>积分</th>
+<th>服务器</th>
 <th>状态</th>
 <th>操作</th>
 </tr>
 </thead>
 <tbody>
-<?php $models=$DB->query("SELECT * FROM vhost_models ORDER BY sort_order,id")->fetchAll(); foreach($models as $m): ?>
+<?php try { $models=$DB->query("SELECT vm.*,ms.name as server_name FROM vhost_models vm LEFT JOIN mnbt_servers ms ON vm.server_id=ms.id ORDER BY vm.sort_order,vm.id")->fetchAll(); } catch(Exception $e) { $models=$DB->query("SELECT * FROM vhost_models ORDER BY sort_order,id")->fetchAll(); foreach($models as &$m) $m['server_name']=null; unset($m); } foreach($models as $m): ?>
 <tr>
 <td><?php echo $m['id']; ?></td>
 <td><strong><?php echo h($m['name']); ?></strong></td>
@@ -856,6 +1095,7 @@ document.getElementById('themeInput').value=name;
 <td><?php echo $m['flow']; ?> GB</td>
 <td><?php echo $m['domain_limit']; ?></td>
 <td><span class="badge badge-purple"><?php echo $m['price']; ?> 积分</span></td>
+<td><?php echo $m['server_name'] ? h($m['server_name']) : '<span style="color:var(--gray-500)">默认</span>'; ?></td>
 <td>
 <?php if($m['status']): ?>
 <span class="badge badge-success"><i class="fas fa-check"></i> 上架</span>
@@ -881,7 +1121,7 @@ document.getElementById('themeInput').value=name;
 </tr>
 <?php endforeach; ?>
 <?php if(empty($models)): ?>
-<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--gray-500)">
+<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--gray-500)">
 <i class="fas fa-inbox" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>
 暂无型号数据
 </td></tr>
@@ -935,23 +1175,33 @@ document.getElementById('themeInput').value=name;
 <th>型号</th>
 <th>账号</th>
 <th>密码</th>
+<th>服务器</th>
 <th>MNBT</th>
 <th>到期时间</th>
 <th>操作</th>
 </tr>
 </thead>
 <tbody>
-<?php 
+<?php
 $search = trim($_GET['search'] ?? '');
 if ($search) {
     $searchParam = '%' . $search . '%';
-    $stmt = $DB->prepare("SELECT v.*,u.email,vm.name as model_name FROM vhosts v LEFT JOIN users u ON v.user_id=u.id LEFT JOIN vhost_models vm ON v.model_id=vm.id WHERE v.account LIKE ? OR u.email LIKE ? OR vm.name LIKE ? ORDER BY v.id DESC");
-    $stmt->execute([$searchParam, $searchParam, $searchParam]);
+    try {
+        $stmt = $DB->prepare("SELECT v.*,u.email,vm.name as model_name,ms.name as server_name FROM vhosts v LEFT JOIN users u ON v.user_id=u.id LEFT JOIN vhost_models vm ON v.model_id=vm.id LEFT JOIN mnbt_servers ms ON v.server_id=ms.id WHERE v.account LIKE ? OR u.email LIKE ? OR vm.name LIKE ? ORDER BY v.id DESC");
+        $stmt->execute([$searchParam, $searchParam, $searchParam]);
+    } catch(Exception $e) {
+        $stmt = $DB->prepare("SELECT v.*,u.email,vm.name as model_name FROM vhosts v LEFT JOIN users u ON v.user_id=u.id LEFT JOIN vhost_models vm ON v.model_id=vm.id WHERE v.account LIKE ? OR u.email LIKE ? OR vm.name LIKE ? ORDER BY v.id DESC");
+        $stmt->execute([$searchParam, $searchParam, $searchParam]);
+    }
 } else {
-    $stmt = $DB->query("SELECT v.*,u.email,vm.name as model_name FROM vhosts v LEFT JOIN users u ON v.user_id=u.id LEFT JOIN vhost_models vm ON v.model_id=vm.id ORDER BY v.id DESC");
+    try {
+        $stmt = $DB->query("SELECT v.*,u.email,vm.name as model_name,ms.name as server_name FROM vhosts v LEFT JOIN users u ON v.user_id=u.id LEFT JOIN vhost_models vm ON v.model_id=vm.id LEFT JOIN mnbt_servers ms ON v.server_id=ms.id ORDER BY v.id DESC");
+    } catch(Exception $e) {
+        $stmt = $DB->query("SELECT v.*,u.email,vm.name as model_name FROM vhosts v LEFT JOIN users u ON v.user_id=u.id LEFT JOIN vhost_models vm ON v.model_id=vm.id ORDER BY v.id DESC");
+    }
 }
-$vhosts = $stmt->fetchAll(); 
-foreach($vhosts as $v): ?>
+$vhosts = $stmt->fetchAll();
+foreach($vhosts as $v): if(!isset($v['server_name'])) $v['server_name']=null; ?>
 <tr>
 <td><input type="checkbox" class="vhost-check" value="<?php echo $v['id']; ?>"></td>
 <td><?php echo $v['id']; ?></td>
@@ -959,6 +1209,7 @@ foreach($vhosts as $v): ?>
 <td><?php echo h($v['model_name'] ?? '<span style="color:var(--gray-500)">已删除</span>'); ?></td>
 <td><code style="background:var(--gray-100);padding:2px 8px;border-radius:4px"><?php echo h($v['account']); ?></code></td>
 <td><code style="background:var(--gray-100);padding:2px 8px;border-radius:4px"><?php echo h($v['password']); ?></code></td>
+<td><?php echo $v['server_name'] ? h($v['server_name']) : '<span style="color:var(--gray-500)">默认</span>'; ?></td>
 <td>
 <?php if($v['mnbt_opened']): ?>
 <span class="badge badge-success"><i class="fas fa-check"></i> 已开通</span>
@@ -977,7 +1228,7 @@ foreach($vhosts as $v): ?>
 </tr>
 <?php endforeach; ?>
 <?php if(empty($vhosts)): ?>
-<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--gray-500)">
+<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--gray-500)">
 <i class="fas fa-inbox" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>
 暂无数据<?php echo $search?'（无匹配结果）':''; ?>
 </td></tr>
