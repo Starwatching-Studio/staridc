@@ -92,30 +92,31 @@
 
 ### Installation Steps
 
-1. **Download Source**
+| Step | Action |
+|:----:|--------|
+| 1 | **Download source code** and extract locally |
+| 2 | **Upload to server**: Create a website (PHP 8.0 recommended), upload project files to web root |
+| 3 | **Run installation wizard**: Visit `http://your-domain/install/`, enter database info and admin credentials, system auto-creates tables and seed data |
+| 4 | **Configure BT MNBT Plugin** (see details below) |
+| 5 | **Configure Payment Gateway**: Register EPay merchant → Admin → System Config → Payment |
+| 6 | **Configure Email Service (Optional)**: Admin → System Config → Email, enter SMTP details |
+| 7 | **Configure Cron Job (Optional)**: Set up Crontab for daily expiry alerts |
 
-2. **Upload to Server**
-   Create a website (PHP 8.0 recommended) and upload project files to the web root directory
-3. **Run Installation Wizard**
-   Visit `http://your-domain/install/` in your browser and follow the prompts:
-   - Enter database connection details
-   - Set admin account and password
-   - The system automatically creates database tables and initial data
-4. **Configure BT MNBT Plugin**
-   - Install **MNBT system** in BT Panel
-   - Obtain API URL, panel ID, and keys
-   - Enter them in Admin → System Config → MNBT
-5. **Configure Payment Gateway**
-   - Register an EPay merchant account
-   - Enter merchant details in Admin → System Config → Payment
-6. **Configure Email Service (Optional)**
-   - Enter SMTP details in Admin → System Config → Email
-7. **Configure Cron Job (Optional)**
-   ```bash
-   # Run daily at midnight to detect expiring hosts and send alert emails
-   crontab -e
-   0 0 * * * php /path/to/staridc/cron_expire_warning.php
-   ```
+#### Step 4 Details: Configure BT MNBT Plugin
+
+1. Install the **MNBT system** plugin in BT Panel
+2. Log in to MNBT backend and obtain the following three parameters:
+
+   | Parameter | Where to Find |
+   |-----------|---------------|
+   | API URL | MNBT Backend → System Management → API Settings (format: `mnbt_system_connection/api/api.php`) |
+   | Panel ID | MNBT Backend → BT Panel List → BT Panel Number |
+   | BT Call Key | Same location (**Note: this is the BT Call Key, NOT the BT Panel Key**) |
+
+3. Go to StarIDC Admin → System Config → MNBT and fill in the above three items (this is your default server)
+4. For multiple servers, go to **Server Management** page and add additional MNBT panels using the same method
+
+> **Note**: The API URL must be directly accessible from your server. Do not use domains proxied through Cloudflare
 
 ### Default Hosting Plans
 
