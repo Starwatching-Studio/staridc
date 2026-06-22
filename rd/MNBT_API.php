@@ -52,7 +52,7 @@ class MNBT_API {
         if ($response === false || !empty($error)) return ['code' => 100, 'msg' => 'API请求失败：' . $error];
         if (empty($response)) return ['code' => 100, 'msg' => 'API返回空响应'];
         $result = json_decode($response, true);
-        if (json_last_error() !== JSON_ERROR_NONE) return ['code' => 100, 'msg' => 'API返回数据格式错误'];
+        if (json_last_error() !== JSON_ERROR_NONE) return ['code' => 100, 'msg' => 'API返回数据格式错误：' . mb_substr($response, 0, 500)];
         return $result;
     }
 
