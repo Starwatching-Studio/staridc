@@ -278,6 +278,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $msg = '服务器不存在'; $msgType = 'error';
             }
             break;
+        case 'add_coupon':
+            $code = trim($_POST['code'] ?? '');
+            $discount = intval($_POST['discount'] ?? 0);
+            $maxUses = intval($_POST['max_uses'] ?? 1);
+            $expireAt = !empty($_POST['expire_at']) ? $_POST['expire_at'] : null;
+            $modelId = !empty($_POST['model_id']) ? intval($_POST['model_id']) : null;
+            if (empty($code)) {
+                $code = strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 8));
+            }
+            if ($discount <= 0 || $discount >= 100) {
+                $msg = '折扣必须在1-99之间'; $msgType = 'error'; break;
+            }
+            try {
+                $stmt = $DB->prepare("INSERT INTO coupons(code,discount,max_uses,expire_at,model_id) VALUES(?,?,?,?,?)");
+                $stmt->execute([$code, $discount, $maxUses, $expireAt, $modelId]);
+                $msg = '优惠码添加成功：' . h($code); $msgType = 'success';
+            } catch (Exception $e) {
+                $msg = '添加失败：优惠码可能已存在'; $msgType = 'error';
+            }
+            break;
+        case 'batch_add_coupon':
+            $prefix = trim($_POST['prefix'] ?? 'CP');
+            $count = intval($_POST['count'] ?? 5);
+            $discount = intval($_POST['discount'] ?? 0);
+            $maxUses = intval($_POST['max_uses'] ?? 1);
+            $expireAt = !empty($_POST['expire_at']) ? $_POST['expire_at'] : null;
+            $modelId = !empty($_POST['model_id']) ? intval($_POST['model_id']) : null;
+            if ($discount <= 0 || $discount >= 100) {
+                $msg = '折扣必须在1-99之间'; $msgType = 'error'; break;
+            }
+            if ($count <= 0 || $count > 100) {
+                $msg = '生成数量需在1-100之间'; $msgType = 'error'; break;
+            }
+            $generated = 0;
+            $stmt = $DB->prepare("INSERT IGNORE INTO coupons(code,discount,max_uses,expire_at,model_id) VALUES(?,?,?,?,?)");
+            for ($i = 0; $i < $count; $i++) {
+                $code = $prefix . strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 6));
+                $stmt->execute([$code, $discount, $maxUses, $expireAt, $modelId]);
+                if ($stmt->rowCount() > 0) $generated++;
+            }
+            $msg = "已生成 {$generated} 个优惠码"; $msgType = 'success';
+            break;
+        case 'del_coupon':
+            $stmt = $DB->prepare("DELETE FROM coupons WHERE id=?");
+            $stmt->execute([intval($_POST['id'])]);
+            $msg = '优惠码已删除'; $msgType = 'success';
+            break;
+        case 'toggle_coupon':
+            $stmt = $DB->prepare("UPDATE coupons SET status=? WHERE id=?");
+            $stmt->execute([intval($_POST['status']), intval($_POST['id'])]);
+            $msg = '操作成功'; $msgType = 'success';
+            break;
     }
 }
 
@@ -285,7 +337,7 @@ $totalUsers = $DB->query("SELECT COUNT(*) as c FROM users")->fetch()['c'];
 $totalVhosts = $DB->query("SELECT COUNT(*) as c FROM vhosts")->fetch()['c'];
 $todayVisits = $DB->query("SELECT COUNT(*) as c FROM visit_logs WHERE visit_date=CURDATE()")->fetch()['c'];
 $totalOrders = $DB->query("SELECT COUNT(*) as c FROM orders WHERE status=1")->fetch()['c'];
-$pages = ['dashboard','config','servers','vhost_models','vhosts','users','prices','announcement','statistics'];
+$pages = ['dashboard','config','servers','vhost_models','vhosts','users','prices','coupons','announcement','statistics'];
 if (!in_array($page, $pages)) $page = 'dashboard';
 
 $pageTitles = [
@@ -296,6 +348,7 @@ $pageTitles = [
     'vhosts' => ['icon' => 'fa-server', 'title' => '虚拟主机', 'desc' => '用户主机列表'],
     'users' => ['icon' => 'fa-users', 'title' => '用户管理', 'desc' => '会员信息管理'],
     'prices' => ['icon' => 'fa-tags', 'title' => '价格设置', 'desc' => '积分与定价'],
+    'coupons' => ['icon' => 'fa-ticket-alt', 'title' => '优惠码管理', 'desc' => '优惠码创建与管理'],
     'announcement' => ['icon' => 'fa-bullhorn', 'title' => '公告管理', 'desc' => '网站公告发布'],
     'statistics' => ['icon' => 'fa-chart-line', 'title' => '消费统计', 'desc' => '运营数据分析']
 ];
@@ -1562,6 +1615,209 @@ document.addEventListener('click', function(e) {
 
 <button type="submit" class="btn btn-primary" style="margin-top:8px"><i class="fas fa-save"></i> 保存价格设置</button>
 </form>
+<?php endif; ?>
+
+<!-- 优惠码管理 -->
+<?php if($page==='coupons'): ?>
+<div class="tabs">
+<a class="tab active" onclick="showCouponTab('tab-add')"><i class="fas fa-plus-circle"></i> 添加优惠码</a>
+<a class="tab" onclick="showCouponTab('tab-batch')"><i class="fas fa-layer-group"></i> 批量生成</a>
+</div>
+
+<div id="tab-add" class="tab-content active">
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-plus-circle"></i> 添加优惠码</h3>
+</div>
+<form method="post" class="form-row">
+<input type="hidden" name="action" value="add_coupon">
+<div class="form-group">
+<label class="form-label">优惠码 <span style="color:var(--gray-500);font-weight:normal">(留空自动生成)</span></label>
+<input type="text" name="code" class="form-control" placeholder="如：SALE20 或留空自动生成">
+</div>
+<div class="form-group">
+<label class="form-label">折扣百分比</label>
+<input type="number" name="discount" min="1" max="99" required class="form-control" placeholder="如 20 表示8折">
+<p class="form-hint">填写1-99，如填20表示原价的80%（8折）</p>
+</div>
+<div class="form-group">
+<label class="form-label">可用次数</label>
+<input type="number" name="max_uses" min="0" value="1" required class="form-control">
+<p class="form-hint">1=一次性使用，0=无限次使用</p>
+</div>
+<div class="form-group">
+<label class="form-label">有效期至 <span style="color:var(--gray-500);font-weight:normal">(留空永久有效)</span></label>
+<input type="datetime-local" name="expire_at" class="form-control">
+</div>
+<div class="form-group">
+<label class="form-label">适用型号 <span style="color:var(--gray-500);font-weight:normal">(留空适用全部)</span></label>
+<select name="model_id" class="form-control">
+<option value="">全部型号</option>
+<?php try { $couponModels=$DB->query("SELECT * FROM vhost_models ORDER BY sort_order,id")->fetchAll(); } catch(Exception $e) { $couponModels=[]; } foreach($couponModels as $cm): ?>
+<option value="<?php echo $cm['id']; ?>"><?php echo h($cm['name']); ?></option>
+<?php endforeach; ?>
+</select>
+</div>
+<div style="display:flex;align-items:flex-end">
+<button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> 添加</button>
+</div>
+</form>
+</div>
+</div>
+
+<div id="tab-batch" class="tab-content">
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-layer-group"></i> 批量生成优惠码</h3>
+</div>
+<form method="post" class="form-row">
+<input type="hidden" name="action" value="batch_add_coupon">
+<div class="form-group" style="flex:0.8">
+<label class="form-label">优惠码前缀</label>
+<input type="text" name="prefix" value="CP" class="form-control" placeholder="如：SALE">
+</div>
+<div class="form-group" style="flex:0.5">
+<label class="form-label">生成数量</label>
+<input type="number" name="count" min="1" max="100" value="10" required class="form-control">
+</div>
+<div class="form-group">
+<label class="form-label">折扣百分比</label>
+<input type="number" name="discount" min="1" max="99" value="10" required class="form-control" placeholder="如 20 表示8折">
+</div>
+<div class="form-group">
+<label class="form-label">可用次数</label>
+<input type="number" name="max_uses" min="0" value="1" required class="form-control">
+</div>
+<div class="form-group">
+<label class="form-label">有效期至</label>
+<input type="datetime-local" name="expire_at" class="form-control">
+</div>
+<div class="form-group">
+<label class="form-label">适用型号</label>
+<select name="model_id" class="form-control">
+<option value="">全部型号</option>
+<?php foreach($couponModels as $cm): ?>
+<option value="<?php echo $cm['id']; ?>"><?php echo h($cm['name']); ?></option>
+<?php endforeach; ?>
+</select>
+</div>
+<div style="display:flex;align-items:flex-end">
+<button type="submit" class="btn btn-primary"><i class="fas fa-magic"></i> 批量生成</button>
+</div>
+</form>
+</div>
+</div>
+
+<script>
+function showCouponTab(id){
+    document.querySelectorAll('.tab-content').forEach(function(el){el.classList.remove('active')});
+    document.querySelectorAll('.tab').forEach(function(el){el.classList.remove('active')});
+    document.getElementById(id).classList.add('active');
+    event.target.classList.add('active');
+}
+</script>
+
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-list"></i> 优惠码列表</h3>
+<?php
+$couponTotal = 0;
+$couponUsed = 0;
+try {
+    $couponTotal = $DB->query("SELECT COUNT(*) as c FROM coupons")->fetch()['c'];
+    $couponUsed = $DB->query("SELECT COUNT(*) as c FROM coupons WHERE status=1")->fetch()['c'];
+} catch(Exception $e) {}
+?>
+<span class="badge badge-info">共 <?php echo $couponTotal; ?> 个</span>
+<span class="badge badge-warning" style="margin-left:6px">已用完 <?php echo $couponUsed; ?> 个</span>
+</div>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>优惠码</th>
+<th>折扣</th>
+<th>使用情况</th>
+<th>有效期</th>
+<th>适用型号</th>
+<th>状态</th>
+<th>创建时间</th>
+<th>操作</th>
+</tr>
+</thead>
+<tbody>
+<?php
+try {
+    $coupons = $DB->query("SELECT c.*, vm.name as model_name FROM coupons c LEFT JOIN vhost_models vm ON c.model_id=vm.id ORDER BY c.id DESC")->fetchAll();
+} catch(Exception $e) {
+    $coupons = $DB->query("SELECT * FROM coupons ORDER BY id DESC")->fetchAll();
+    foreach($coupons as &$c) $c['model_name'] = null; unset($c);
+}
+foreach($coupons as $c):
+    $isExpired = !empty($c['expire_at']) && strtotime($c['expire_at']) < time();
+    $isExhausted = $c['max_uses'] > 0 && $c['used_count'] >= $c['max_uses'];
+?>
+<tr>
+<td><?php echo $c['id']; ?></td>
+<td><code style="background:var(--gray-100);padding:3px 10px;border-radius:6px;font-weight:600;letter-spacing:1px"><?php echo h($c['code']); ?></code></td>
+<td><span class="badge badge-purple"><?php echo $c['discount']; ?>% OFF</span></td>
+<td>
+<?php if($c['max_uses'] == 0): ?>
+<span class="badge badge-info"><?php echo $c['used_count']; ?> / 无限</span>
+<?php else: ?>
+<span class="badge <?php echo $isExhausted?'badge-danger':'badge-success'; ?>"><?php echo $c['used_count']; ?> / <?php echo $c['max_uses']; ?></span>
+<?php endif; ?>
+</td>
+<td>
+<?php if(empty($c['expire_at'])): ?>
+<span style="color:var(--gray-500)">永久</span>
+<?php elseif($isExpired): ?>
+<span class="badge badge-danger">已过期</span>
+<?php else: ?>
+<span style="font-size:.85rem"><?php echo date('Y-m-d H:i', strtotime($c['expire_at'])); ?></span>
+<?php endif; ?>
+</td>
+<td><?php echo $c['model_name'] ? h($c['model_name']) : '<span style="color:var(--gray-500)">全部</span>'; ?></td>
+<td>
+<?php if($c['status'] == 1): ?>
+<span class="badge badge-danger"><i class="fas fa-times"></i> 已禁用</span>
+<?php elseif($isExpired): ?>
+<span class="badge badge-warning"><i class="fas fa-clock"></i> 已过期</span>
+<?php elseif($isExhausted): ?>
+<span class="badge badge-warning"><i class="fas fa-ban"></i> 已用完</span>
+<?php else: ?>
+<span class="badge badge-success"><i class="fas fa-check"></i> 可用</span>
+<?php endif; ?>
+</td>
+<td style="font-size:.85rem;color:var(--gray-500)"><?php echo date('Y-m-d H:i', strtotime($c['created_at'])); ?></td>
+<td>
+<form method="post" style="display:inline">
+<input type="hidden" name="action" value="toggle_coupon">
+<input type="hidden" name="id" value="<?php echo $c['id']; ?>">
+<input type="hidden" name="status" value="<?php echo $c['status']?0:1; ?>">
+<button type="submit" class="btn btn-sm <?php echo $c['status']?'btn-success':'btn-outline'; ?>">
+<?php echo $c['status']?'启用':'禁用'; ?>
+</button>
+</form>
+<form method="post" style="display:inline" onsubmit="return confirm('确定删除此优惠码？')">
+<input type="hidden" name="action" value="del_coupon">
+<input type="hidden" name="id" value="<?php echo $c['id']; ?>">
+<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+</form>
+</td>
+</tr>
+<?php endforeach; ?>
+<?php if(empty($coupons)): ?>
+<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--gray-500)">
+<i class="fas fa-ticket-alt" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>
+暂无优惠码，点击上方添加或批量生成
+</td></tr>
+<?php endif; ?>
+</tbody>
+</table>
+</div>
+</div>
 <?php endif; ?>
 
 <!-- 公告管理 -->

@@ -180,6 +180,27 @@ if ($authorized) {
             $logs[] = "⏭️ vhosts 表字段已存在：server_id";
         }
 
+        // === 7. coupons 表添加新字段（有效期、使用次数、适用型号） ===
+        $stmt = $pdo->query("SHOW COLUMNS FROM coupons");
+        $cpCols = [];
+        while ($row = $stmt->fetch()) {
+            $cpCols[] = $row['Field'];
+        }
+        $couponNewCols = [
+            'max_uses'   => 'INT NOT NULL DEFAULT 1',
+            'used_count' => 'INT NOT NULL DEFAULT 0',
+            'expire_at'  => 'DATETIME NULL',
+            'model_id'   => 'INT NULL',
+        ];
+        foreach ($couponNewCols as $col => $def) {
+            if (!in_array($col, $cpCols)) {
+                $pdo->exec("ALTER TABLE coupons ADD COLUMN {$col} {$def}");
+                $logs[] = "✅ coupons 表已添加字段：{$col}";
+            } else {
+                $logs[] = "⏭️ coupons 表字段已存在：{$col}";
+            }
+        }
+
         $success = '数据库升级完成！共执行 ' . count($logs) . ' 项操作。';
     } catch (Exception $e) {
         $error = '升级失败：' . $e->getMessage();

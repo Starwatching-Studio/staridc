@@ -21,11 +21,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         echo json_encode(['valid' => false, 'message' => '主机型号不存在']);
         exit;
     }
-    $stmt = $DB->prepare("SELECT * FROM coupons WHERE code=? AND status=0");
+    $stmt = $DB->prepare("SELECT * FROM coupons WHERE code=? AND status=0 AND (used_count < max_uses OR max_uses = 0) AND (expire_at IS NULL OR expire_at > NOW())");
     $stmt->execute([$code]);
     $cp = $stmt->fetch();
     if (!$cp) {
-        echo json_encode(['valid' => false, 'message' => '优惠码无效或已使用']);
+        echo json_encode(['valid' => false, 'message' => '优惠码无效、已用完或已过期']);
+        exit;
+    }
+    if ($cp['model_id'] !== null && intval($cp['model_id']) !== $modelId) {
+        echo json_encode(['valid' => false, 'message' => '该优惠码不适用于此型号']);
         exit;
     }
     $finalPrice = ceil($model['price'] * (100 - $cp['discount']) / 100);
@@ -48,15 +52,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn) {
             $couponDiscount = 0;
             $couponId = 0;
             if ($couponCode) {
-                $stmt = $DB->prepare("SELECT * FROM coupons WHERE code=? AND status=0");
+                $stmt = $DB->prepare("SELECT * FROM coupons WHERE code=? AND status=0 AND (used_count < max_uses OR max_uses = 0) AND (expire_at IS NULL OR expire_at > NOW())");
                 $stmt->execute([$couponCode]);
                 $cp = $stmt->fetch();
                 if ($cp) {
-                    $couponDiscount = $cp['discount'];
-                    $couponId = $cp['id'];
-                    $finalPrice = ceil($model['price'] * (100 - $couponDiscount) / 100);
+                    if ($cp['model_id'] !== null && intval($cp['model_id']) !== $modelId) {
+                        $error = '该优惠码不适用于此型号';
+                    } else {
+                        $couponDiscount = $cp['discount'];
+                        $couponId = $cp['id'];
+                        $finalPrice = ceil($model['price'] * (100 - $couponDiscount) / 100);
+                    }
                 } else {
-                    $error = '优惠码无效或已使用';
+                    $error = '优惠码无效、已用完或已过期';
                 }
             }
             if (!$error && $user['points'] < $finalPrice) {
@@ -75,8 +83,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn) {
                     $mnbtResult = MNBT_API::openHost($account, $password, $model['web_space'], $model['db_space'], $model['flow'], $model['domain_limit'], $expireDate, $server);
                     if ($mnbtResult['success']) {
                         if ($couponId) {
-                            $cpStmt = $DB->prepare("UPDATE coupons SET status=1, used_by=?, used_at=NOW() WHERE id=? AND status=0");
+                            $cpStmt = $DB->prepare("UPDATE coupons SET used_count=used_count+1, used_by=?, used_at=NOW() WHERE id=?");
                             $cpStmt->execute([$user['id'], $couponId]);
+                            // 如果已达最大使用次数，标记为已用完
+                            $cpCheck = $DB->prepare("SELECT max_uses, used_count FROM coupons WHERE id=?");
+                            $cpCheck->execute([$couponId]);
+                            $cpInfo = $cpCheck->fetch();
+                            if ($cpInfo && $cpInfo['max_uses'] > 0 && $cpInfo['used_count'] >= $cpInfo['max_uses']) {
+                                $DB->prepare("UPDATE coupons SET status=1 WHERE id=?")->execute([$couponId]);
+                            }
                         }
                         $stmt2 = $DB->prepare("UPDATE users SET points=points-? WHERE id=?");
                         $stmt2->execute([$finalPrice, $user['id']]);
