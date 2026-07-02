@@ -158,6 +158,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     INDEX idx_account_type (account, type)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+                $pdo->exec("CREATE TABLE IF NOT EXISTS tickets (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    vhost_id INT NULL,
+                    subject VARCHAR(200) NOT NULL,
+                    status TINYINT NOT NULL DEFAULT 0,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                $pdo->exec("CREATE TABLE IF NOT EXISTS ticket_replies (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    ticket_id INT NOT NULL,
+                    user_id INT NULL,
+                    admin_id INT NULL,
+                    content TEXT NOT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                $pdo->exec("CREATE TABLE IF NOT EXISTS recharge_packages (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    points INT NOT NULL DEFAULT 0,
+                    price DECIMAL(10,2) NOT NULL DEFAULT 0,
+                    sort_order INT NOT NULL DEFAULT 0,
+                    status TINYINT NOT NULL DEFAULT 1,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
                 $defaults = [
                     'site_name' => $siteName,
                     'mnbt_api_url' => '', 'mnbt_bh' => '', 'mnbt_key' => '', 'mnbt_keye' => '', 'mnbt_vs' => '16',
@@ -165,7 +195,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'mail_host' => '', 'mail_port' => '465', 'mail_user' => '', 'mail_pass' => '',
                     'mail_name' => $siteName, 'mail_security' => 'ssl', 'mail_enabled' => '0',
                     'mail_whitelist' => '',
-                    'mail_notify_host' => '1', 'mail_notify_points' => '1', 'mail_notify_expire' => '1', 'cron_key' => '',
+                    'mail_notify_host' => '1', 'mail_notify_points' => '1', 'mail_notify_expire' => '1', 'mail_notify_ticket' => '1', 'cron_key' => '',
                     'sign_min' => '50', 'sign_max' => '100',
                     'theme' => '清新薄荷主题',
                     'announcement' => '',

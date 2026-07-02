@@ -202,6 +202,69 @@ if ($authorized) {
         }
 
         $success = '数据库升级完成！共执行 ' . count($logs) . ' 项操作。';
+
+        // === 8. 创建工单表 ===
+        if (!in_array('tickets', $tables)) {
+            $pdo->exec("CREATE TABLE tickets (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                vhost_id INT NULL,
+                subject VARCHAR(200) NOT NULL,
+                status TINYINT NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $logs[] = "✅ 已创建表：tickets";
+        } else {
+            $logs[] = "⏭️ 表已存在：tickets";
+        }
+
+        if (!in_array('ticket_replies', $tables)) {
+            $pdo->exec("CREATE TABLE ticket_replies (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                ticket_id INT NOT NULL,
+                user_id INT NULL,
+                admin_id INT NULL,
+                content TEXT NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $logs[] = "✅ 已创建表：ticket_replies";
+        } else {
+            $logs[] = "⏭️ 表已存在：ticket_replies";
+        }
+
+        // === 9. 补充工单通知配置项 ===
+        $ticketConfigs = [
+            'mail_notify_ticket' => '1',
+        ];
+        $insertTicketStmt = $pdo->prepare("INSERT IGNORE INTO config(k,v) VALUES(?,?)");
+        foreach ($ticketConfigs as $key => $val) {
+            if (!in_array($key, $configKeys)) {
+                $insertTicketStmt->execute([$key, $val]);
+                $logs[] = "✅ 已添加配置项：{$key}";
+            } else {
+                $logs[] = "⏭️ 配置项已存在：{$key}";
+            }
+        }
+
+        // === 10. 创建充值套餐表 ===
+        if (!in_array('recharge_packages', $tables)) {
+            $pdo->exec("CREATE TABLE recharge_packages (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                points INT NOT NULL DEFAULT 0,
+                price DECIMAL(10,2) NOT NULL DEFAULT 0,
+                sort_order INT NOT NULL DEFAULT 0,
+                status TINYINT NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $logs[] = "✅ 已创建表：recharge_packages";
+        } else {
+            $logs[] = "⏭️ 表已存在：recharge_packages";
+        }
+
+        $success = '数据库升级完成！共执行 ' . count($logs) . ' 项操作。';
     } catch (Exception $e) {
         $error = '升级失败：' . $e->getMessage();
     }

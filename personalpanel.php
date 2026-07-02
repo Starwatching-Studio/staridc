@@ -10,6 +10,23 @@ $user = getUser();
 $error = '';
 $success = '';
 
+function getRechargePackages() {
+    global $DB;
+    try {
+        $stmt = $DB->prepare("SELECT * FROM recharge_packages WHERE status=1 ORDER BY sort_order,id");
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+        if (!empty($rows)) return $rows;
+    } catch (Exception $e) {}
+    // 兼容旧版：如果表不存在或没有数据，返回旧的固定套餐
+    return [
+        ['id' => 1, 'points' => 200,  'price' => conf('points_200_price', '10')],
+        ['id' => 2, 'points' => 400,  'price' => conf('points_400_price', '18')],
+        ['id' => 3, 'points' => 1000, 'price' => conf('points_1000_price', '40')],
+        ['id' => 4, 'points' => 3000, 'price' => conf('points_3000_price', '100')],
+    ];
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -29,23 +46,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'buy_points') {
-        $pkg = $_POST['package'] ?? '';
-        $packages = [
-            '200'   => ['points' => 200,  'price' => conf('points_200_price', '10')],
-            '400'   => ['points' => 400,  'price' => conf('points_400_price', '18')],
-            '1000'  => ['points' => 1000, 'price' => conf('points_1000_price', '40')],
-            '3000'  => ['points' => 3000, 'price' => conf('points_3000_price', '100')],
-        ];
-        if (!isset($packages[$pkg])) {
+        $pkgId = intval($_POST['package'] ?? 0);
+        $packages = getRechargePackages();
+        $selected = null;
+        foreach ($packages as $p) {
+            if ($p['id'] == $pkgId) { $selected = $p; break; }
+        }
+        if (!$selected) {
             $error = '无效的积分套餐';
         } else {
             $payType = in_array(trim($_POST['pay_type'] ?? ''), ['alipay', 'wxpay']) ? trim($_POST['pay_type']) : 'alipay';
             $orderNo = genOrderNo();
             $stmt = $DB->prepare("INSERT INTO orders(order_no,user_id,type,amount,points,status) VALUES(?,?,'points',?,?,0)");
-            $stmt->execute([$orderNo, $user['id'], $packages[$pkg]['price'], $packages[$pkg]['points']]);
+            $stmt->execute([$orderNo, $user['id'], $selected['price'], $selected['points']]);
             $notifyUrl = siteUrl() . 'pay_notify.php';
             $returnUrl = siteUrl() . 'pay_return.php';
-            PayAPI::createPayment($orderNo, '积分充值 - ' . $packages[$pkg]['points'] . '积分', $packages[$pkg]['price'], $payType, $notifyUrl, $returnUrl);
+            PayAPI::createPayment($orderNo, '积分充值 - ' . $selected['points'] . '积分', $selected['price'], $payType, $notifyUrl, $returnUrl);
             exit;
         }
     }
@@ -120,6 +136,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $success = '昵称已更新';
         $user = getUser();
     }
+
+    // === 工单操作 ===
+    if ($action === 'create_ticket') {
+        $subject = trim($_POST['subject'] ?? '');
+        $content = trim($_POST['content'] ?? '');
+        $vhostId = !empty($_POST['vhost_id']) ? intval($_POST['vhost_id']) : null;
+        if (empty($subject) || empty($content)) {
+            $error = '请填写工单标题和内容';
+        } elseif (mb_strlen($subject) > 200) {
+            $error = '工单标题不能超过200字';
+        } else {
+            $stmt = $DB->prepare("INSERT INTO tickets(user_id,vhost_id,subject) VALUES(?,?,?)");
+            $stmt->execute([$user['id'], $vhostId, $subject]);
+            $ticketId = $DB->lastInsertId();
+            $stmt2 = $DB->prepare("INSERT INTO ticket_replies(ticket_id,user_id,content) VALUES(?,?,?)");
+            $stmt2->execute([$ticketId, $user['id'], $content]);
+            $success = '工单创建成功';
+        }
+    }
+
+    if ($action === 'reply_ticket') {
+        $ticketId = intval($_POST['ticket_id'] ?? 0);
+        $content = trim($_POST['content'] ?? '');
+        $stmt = $DB->prepare("SELECT * FROM tickets WHERE id=? AND user_id=?");
+        $stmt->execute([$ticketId, $user['id']]);
+        $ticket = $stmt->fetch();
+        if (!$ticket) {
+            $error = '工单不存在';
+        } elseif ($ticket['status'] == 2) {
+            $error = '工单已关闭，无法回复';
+        } elseif (empty($content)) {
+            $error = '请输入回复内容';
+        } else {
+            $stmt2 = $DB->prepare("INSERT INTO ticket_replies(ticket_id,user_id,content) VALUES(?,?,?)");
+            $stmt2->execute([$ticketId, $user['id'], $content]);
+            $stmt3 = $DB->prepare("UPDATE tickets SET status=0, updated_at=NOW() WHERE id=?");
+            $stmt3->execute([$ticketId]);
+            $success = '回复成功';
+        }
+    }
+
+    if ($action === 'close_ticket') {
+        $ticketId = intval($_POST['ticket_id'] ?? 0);
+        $stmt = $DB->prepare("SELECT * FROM tickets WHERE id=? AND user_id=?");
+        $stmt->execute([$ticketId, $user['id']]);
+        $ticket = $stmt->fetch();
+        if (!$ticket) {
+            $error = '工单不存在';
+        } else {
+            $stmt2 = $DB->prepare("UPDATE tickets SET status=2, updated_at=NOW() WHERE id=?");
+            $stmt2->execute([$ticketId]);
+            $success = '工单已关闭';
+        }
+    }
 }
 
 $vhosts = $DB->prepare("SELECT v.*,vm.name as model_name,vm.web_space,vm.db_space FROM vhosts v LEFT JOIN vhost_models vm ON v.model_id=vm.id WHERE v.user_id=? ORDER BY v.id DESC");
@@ -171,6 +241,7 @@ renderHeader('个人中心');
             <a href="#" class="panel-nav-item active" onclick="showPanel('info')">个人信息</a>
             <a href="#" class="panel-nav-item" onclick="showPanel('points')">积分中心</a>
             <a href="#" class="panel-nav-item" onclick="showPanel('hosts')">我的主机</a>
+            <a href="#" class="panel-nav-item" onclick="showPanel('tickets')">我的工单</a>
             <a href="#" class="panel-nav-item" onclick="showPanel('referral')">推荐奖励</a>
         </nav>
     </div>
@@ -216,18 +287,14 @@ renderHeader('个人中心');
                 </div>
                 <div class="points-packages">
                     <?php
-                    $pkgs = [
-                        ['key'=>'200','points'=>200,'price'=>conf('points_200_price','10')],
-                        ['key'=>'400','points'=>400,'price'=>conf('points_400_price','18')],
-                        ['key'=>'1000','points'=>1000,'price'=>conf('points_1000_price','40')],
-                        ['key'=>'3000','points'=>3000,'price'=>conf('points_3000_price','100')],
-                    ];
+                    $pkgs = getRechargePackages();
                     foreach ($pkgs as $p):
+                        $pid = isset($p['id']) ? $p['id'] : $p['points'];
                     ?>
                     <form method="post" class="pkg-card">
                         <input type="hidden" name="action" value="buy_points">
-                        <input type="hidden" name="package" value="<?php echo $p['key']; ?>">
-                        <input type="hidden" name="pay_type" value="" id="paytype_<?php echo $p['key']; ?>">
+                        <input type="hidden" name="package" value="<?php echo $pid; ?>">
+                        <input type="hidden" name="pay_type" value="" id="paytype_<?php echo $pid; ?>">
                         <div class="pkg-points"><?php echo $p['points']; ?>积分</div>
                         <div class="pkg-price">¥<?php echo $p['price']; ?></div>
                         <button type="submit" class="btn-primary btn-sm">购买</button>
@@ -276,6 +343,99 @@ renderHeader('个人中心');
                             <button type="submit" class="btn-primary btn-sm" style="background:linear-gradient(135deg,#6c5ce7,#a29bfe)">立即登录</button>
                         </form>
                         <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div id="panel-tickets" class="panel-section" style="display:none">
+            <div class="section-card">
+                <div class="section-header">
+                    <h3>我的工单</h3>
+                    <button class="btn-primary btn-sm" onclick="document.getElementById('ticket-form-new').style.display='block';this.style.display='none'">+ 新建工单</button>
+                </div>
+                <div id="ticket-form-new" style="display:none;margin-bottom:20px;padding:20px;border-radius:12px;background:var(--bg-card,#f8f9fa)">
+                    <form method="post">
+                        <input type="hidden" name="action" value="create_ticket">
+                        <div class="form-group">
+                            <label>标题</label>
+                            <input type="text" name="subject" maxlength="200" required placeholder="简要描述您的问题">
+                        </div>
+                        <div class="form-group">
+                            <label>关联主机 <span style="color:var(--gray-500,#999);font-weight:normal">(可选)</span></label>
+                            <select name="vhost_id" class="form-control">
+                                <option value="">不关联</option>
+                                <?php foreach($vhostList as $vh): ?>
+                                <option value="<?php echo $vh['id']; ?>"><?php echo h($vh['model_name'].' - '.$vh['account']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>问题描述</label>
+                            <textarea name="content" rows="4" required placeholder="请详细描述您遇到的问题..."></textarea>
+                        </div>
+                        <div style="display:flex;gap:10px">
+                            <button type="submit" class="btn-primary btn-sm">提交工单</button>
+                            <button type="button" class="btn-sm" style="background:var(--gray-200,#e5e7eb);color:#666;border:none;padding:6px 16px;border-radius:8px;cursor:pointer" onclick="document.getElementById('ticket-form-new').style.display='none';this.parentElement.previousElementSibling.previousElementSibling.parentElement.parentElement.querySelector('.section-header .btn-primary').style.display=''">取消</button>
+                        </div>
+                    </form>
+                </div>
+                <?php
+                $tkList = $DB->prepare("SELECT t.*, vm.name as model_name, vh.account as vhost_account FROM tickets t LEFT JOIN vhosts vh ON t.vhost_id=vh.id LEFT JOIN vhost_models vm ON vh.model_id=vm.id WHERE t.user_id=? ORDER BY t.updated_at DESC");
+                $tkList->execute([$user['id']]);
+                $tickets = $tkList->fetchAll();
+                $statusMap = [0=>'待处理',1=>'已回复',2=>'已关闭'];
+                $statusColor = [0=>'#f59e0b',1=>'#10b981',2=>'#9ca3af'];
+                if (empty($tickets)):
+                ?>
+                <div class="empty-state"><i class="fas fa-ticket-alt" style="font-size:3rem;opacity:0.3;margin-bottom:16px;display:block"></i><p>暂无工单</p></div>
+                <?php else: ?>
+                <div class="hp-ticket-list">
+                    <?php foreach($tickets as $tk): ?>
+                    <div class="hp-ticket-item" onclick="toggleTicketDetail(<?php echo $tk['id']; ?>)">
+                        <div class="hp-ticket-row">
+                            <span class="hp-ticket-id">#<?php echo $tk['id']; ?></span>
+                            <span class="hp-ticket-subject"><?php echo h($tk['subject']); ?></span>
+                            <span class="hp-ticket-status" style="color:<?php echo $statusColor[$tk['status']]; ?>"><?php echo $statusMap[$tk['status']]; ?></span>
+                            <span class="hp-ticket-time"><?php echo date('m-d H:i', strtotime($tk['updated_at'])); ?></span>
+                        </div>
+                        <?php if ($tk['vhost_account']): ?>
+                        <div style="font-size:.8rem;color:#999;margin-top:4px">关联主机：<?php echo h($tk['model_name'].' - '.$tk['vhost_account']); ?></div>
+                        <?php endif; ?>
+                        <div id="ticket-detail-<?php echo $tk['id']; ?>" class="hp-ticket-detail" style="display:none">
+                            <?php
+                            $replies = $DB->prepare("SELECT tr.*, u.email as user_email FROM ticket_replies tr LEFT JOIN users u ON tr.user_id=u.id WHERE tr.ticket_id=? ORDER BY tr.created_at ASC");
+                            $replies->execute([$tk['id']]);
+                            $replyList = $replies->fetchAll();
+                            foreach($replyList as $r):
+                                $isAdminReply = !empty($r['admin_id']);
+                            ?>
+                            <div class="hp-reply-item <?php echo $isAdminReply ? 'hp-reply-admin' : 'hp-reply-user'; ?>">
+                                <div class="hp-reply-header">
+                                    <span class="hp-reply-author"><?php echo $isAdminReply ? '管理员' : h($user['nickname'] ?: substr($user['email'],0,3).'***'); ?></span>
+                                    <span class="hp-reply-time"><?php echo date('Y-m-d H:i', strtotime($r['created_at'])); ?></span>
+                                </div>
+                                <div class="hp-reply-content"><?php echo nl2br(h($r['content'])); ?></div>
+                            </div>
+                            <?php endforeach; ?>
+                            <?php if ($tk['status'] != 2): ?>
+                            <div class="hp-reply-form" onclick="event.stopPropagation()">
+                                <form method="post">
+                                    <input type="hidden" name="action" value="reply_ticket">
+                                    <input type="hidden" name="ticket_id" value="<?php echo $tk['id']; ?>">
+                                    <textarea name="content" rows="3" required placeholder="输入回复内容..." onclick="event.stopPropagation()"></textarea>
+                                    <div style="display:flex;gap:8px;margin-top:8px">
+                                        <button type="submit" class="btn-primary btn-sm">回复</button>
+                                        <button type="submit" name="action" value="close_ticket" class="btn-sm" style="background:#ef4444;color:#fff;border:none;padding:6px 16px;border-radius:8px;cursor:pointer" onclick="return confirm('确定关闭此工单？')">关闭工单</button>
+                                    </div>
+                                </form>
+                            </div>
+                            <?php else: ?>
+                            <div style="text-align:center;padding:12px;color:#999;font-size:.85rem">工单已关闭</div>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <?php endforeach; ?>
@@ -394,6 +554,25 @@ function shareToFriend() {
 .quick-sign-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px 16px;border:none;border-radius:var(--radius-sm);background:var(--gradient-accent);color:#fff;font-size:.92rem;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(45,139,107,.3);transition:all var(--transition)}
 .quick-sign-btn:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(45,139,107,.4)}
 .quick-sign-btn:active{transform:translateY(0)}
+.hp-ticket-list{display:flex;flex-direction:column;gap:10px}
+.hp-ticket-item{padding:14px 16px;border-radius:10px;background:var(--bg-card,#f8f9fa);cursor:pointer;transition:all .2s}
+.hp-ticket-item:hover{filter:brightness(.97)}
+.hp-ticket-row{display:flex;align-items:center;gap:10px}
+.hp-ticket-id{font-weight:700;color:var(--primary-solid,#667eea);font-size:.85rem;min-width:40px}
+.hp-ticket-subject{flex:1;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hp-ticket-status{font-weight:600;font-size:.8rem;min-width:50px;text-align:center}
+.hp-ticket-time{font-size:.8rem;color:#999;min-width:80px;text-align:right}
+.hp-ticket-detail{margin-top:14px;padding-top:14px;border-top:1px solid var(--border-color,#eee)}
+.hp-reply-item{margin-bottom:12px;padding:12px;border-radius:10px;max-width:85%}
+.hp-reply-admin{background:linear-gradient(135deg,#667eea11,#764ba211);border-left:3px solid #667eea;margin-left:0}
+.hp-reply-user{background:var(--bg-card,#f5f5f5);margin-left:auto;border-left:3px solid #10b981}
+.hp-reply-header{display:flex;justify-content:space-between;margin-bottom:6px}
+.hp-reply-author{font-weight:600;font-size:.85rem}
+.hp-reply-time{font-size:.75rem;color:#999}
+.hp-reply-content{font-size:.9rem;line-height:1.6;word-break:break-all}
+.hp-reply-form{margin-top:16px;padding-top:12px;border-top:1px dashed var(--border-color,#ddd)}
+.hp-reply-form textarea{width:100%;padding:10px 12px;border:1px solid var(--border-color,#ddd);border-radius:8px;font-size:.9rem;resize:vertical;background:var(--bg-input,#fff)}
+.hp-reply-form textarea:focus{outline:none;border-color:var(--primary-solid,#667eea)}
 </style>
 
 <script>
@@ -402,6 +581,10 @@ function showPanel(id){
     document.querySelectorAll('.panel-nav-item').forEach(function(el){el.classList.remove('active')});
     document.getElementById('panel-'+id).style.display='block';
     event.target.classList.add('active');
+}
+function toggleTicketDetail(id){
+    var el=document.getElementById('ticket-detail-'+id);
+    el.style.display=el.style.display==='none'?'block':'none';
 }
 function copyText(el){
     var r=document.createRange();r.selectNode(el);window.getSelection().removeAllRanges();window.getSelection().addRange(r);

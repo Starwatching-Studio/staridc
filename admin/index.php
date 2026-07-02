@@ -91,8 +91,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'email_domain_restrict_enabled','email_domain_whitelist',
                 'sign_min','sign_max','theme','announcement',
                 'register_points_enabled','register_points',
-                'points_200_price','points_400_price','points_1000_price','points_3000_price',
-                'referral_enabled','referral_reward_points'];
+                'referral_enabled','referral_reward_points',
+                'mail_notify_ticket'];
             foreach ($fields as $f) {
                 if (isset($_POST[$f])) setConf($f, trim($_POST[$f]));
             }
@@ -330,6 +330,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([intval($_POST['status']), intval($_POST['id'])]);
             $msg = '操作成功'; $msgType = 'success';
             break;
+        case 'admin_reply_ticket':
+            $ticketId = intval($_POST['ticket_id'] ?? 0);
+            $content = trim($_POST['content'] ?? '');
+            $stmt = $DB->prepare("SELECT t.*, u.email as user_email, u.nickname as user_nickname FROM tickets t LEFT JOIN users u ON t.user_id=u.id WHERE t.id=?");
+            $stmt->execute([$ticketId]);
+            $tk = $stmt->fetch();
+            if (!$tk) { $msg = '工单不存在'; $msgType = 'error'; break; }
+            if (empty($content)) { $msg = '请输入回复内容'; $msgType = 'error'; break; }
+            $admin = getAdmin();
+            $stmt2 = $DB->prepare("INSERT INTO ticket_replies(ticket_id,admin_id,content) VALUES(?,?,?)");
+            $stmt2->execute([$ticketId, $admin['id'], $content]);
+            $stmt3 = $DB->prepare("UPDATE tickets SET status=1, updated_at=NOW() WHERE id=?");
+            $stmt3->execute([$ticketId]);
+            // 邮件通知用户
+            if (conf('mail_notify_ticket', '1') === '1' && !empty($tk['user_email'])) {
+                $siteName = conf('site_name', '云主机');
+                $mailBody = "您提交的工单 #{$ticketId}「{$tk['subject']}」已收到管理员回复，请登录查看。\n\n站点：{$siteName}";
+                Mailer::sendNotify($tk['user_email'], "[{$siteName}] 工单 #{$ticketId} 已回复", $mailBody);
+            }
+            $msg = '回复成功'; $msgType = 'success';
+            break;
+        case 'close_ticket':
+            $ticketId = intval($_POST['ticket_id'] ?? 0);
+            $stmt = $DB->prepare("SELECT t.*, u.email as user_email FROM tickets t LEFT JOIN users u ON t.user_id=u.id WHERE t.id=?");
+            $stmt->execute([$ticketId]);
+            $tk = $stmt->fetch();
+            if (!$tk) { $msg = '工单不存在'; $msgType = 'error'; break; }
+            $stmt2 = $DB->prepare("UPDATE tickets SET status=2, updated_at=NOW() WHERE id=?");
+            $stmt2->execute([$ticketId]);
+            if (conf('mail_notify_ticket', '1') === '1' && !empty($tk['user_email'])) {
+                $siteName = conf('site_name', '云主机');
+                $mailBody = "您提交的工单 #{$ticketId}「{$tk['subject']}」已被管理员关闭。\n\n站点：{$siteName}";
+                Mailer::sendNotify($tk['user_email'], "[{$siteName}] 工单 #{$ticketId} 已关闭", $mailBody);
+            }
+            $msg = '工单已关闭'; $msgType = 'success';
+            break;
+        case 'del_ticket':
+            $ticketId = intval($_POST['id'] ?? 0);
+            $stmt = $DB->prepare("DELETE FROM tickets WHERE id=?");
+            $stmt->execute([$ticketId]);
+            $msg = '工单已删除'; $msgType = 'success';
+            break;
+        case 'add_recharge_package':
+            $points = intval($_POST['points'] ?? 0);
+            $price = floatval($_POST['price'] ?? 0);
+            $sortOrder = intval($_POST['sort_order'] ?? 0);
+            if ($points <= 0 || $price <= 0) {
+                $msg = '积分和价格必须大于0'; $msgType = 'error';
+            } else {
+                $stmt = $DB->prepare("INSERT INTO recharge_packages(points,price,sort_order) VALUES(?,?,?)");
+                $stmt->execute([$points, $price, $sortOrder]);
+                $msg = '充值套餐添加成功'; $msgType = 'success';
+            }
+            break;
+        case 'edit_recharge_package':
+            $pkgId = intval($_POST['id'] ?? 0);
+            $points = intval($_POST['points'] ?? 0);
+            $price = floatval($_POST['price'] ?? 0);
+            $sortOrder = intval($_POST['sort_order'] ?? 0);
+            if ($points <= 0 || $price <= 0) {
+                $msg = '积分和价格必须大于0'; $msgType = 'error';
+            } else {
+                $stmt = $DB->prepare("UPDATE recharge_packages SET points=?,price=?,sort_order=? WHERE id=?");
+                $stmt->execute([$points, $price, $sortOrder, $pkgId]);
+                $msg = '充值套餐更新成功'; $msgType = 'success';
+            }
+            break;
+        case 'toggle_recharge_package':
+            $stmt = $DB->prepare("UPDATE recharge_packages SET status=? WHERE id=?");
+            $stmt->execute([intval($_POST['status']), intval($_POST['id'])]);
+            $msg = '操作成功'; $msgType = 'success';
+            break;
+        case 'del_recharge_package':
+            $stmt = $DB->prepare("DELETE FROM recharge_packages WHERE id=?");
+            $stmt->execute([intval($_POST['id'])]);
+            $msg = '充值套餐已删除'; $msgType = 'success';
+            break;
     }
 }
 
@@ -337,7 +414,7 @@ $totalUsers = $DB->query("SELECT COUNT(*) as c FROM users")->fetch()['c'];
 $totalVhosts = $DB->query("SELECT COUNT(*) as c FROM vhosts")->fetch()['c'];
 $todayVisits = $DB->query("SELECT COUNT(*) as c FROM visit_logs WHERE visit_date=CURDATE()")->fetch()['c'];
 $totalOrders = $DB->query("SELECT COUNT(*) as c FROM orders WHERE status=1")->fetch()['c'];
-$pages = ['dashboard','config','servers','vhost_models','vhosts','users','prices','coupons','announcement','statistics'];
+$pages = ['dashboard','config','servers','vhost_models','vhosts','users','prices','recharge_packages','coupons','tickets','announcement','statistics'];
 if (!in_array($page, $pages)) $page = 'dashboard';
 
 $pageTitles = [
@@ -348,7 +425,9 @@ $pageTitles = [
     'vhosts' => ['icon' => 'fa-server', 'title' => '虚拟主机', 'desc' => '用户主机列表'],
     'users' => ['icon' => 'fa-users', 'title' => '用户管理', 'desc' => '会员信息管理'],
     'prices' => ['icon' => 'fa-tags', 'title' => '价格设置', 'desc' => '积分与定价'],
+    'recharge_packages' => ['icon' => 'fa-coins', 'title' => '充值套餐', 'desc' => '自定义积分充值套餐'],
     'coupons' => ['icon' => 'fa-ticket-alt', 'title' => '优惠码管理', 'desc' => '优惠码创建与管理'],
+    'tickets' => ['icon' => 'fa-headset', 'title' => '工单管理', 'desc' => '用户工单处理'],
     'announcement' => ['icon' => 'fa-bullhorn', 'title' => '公告管理', 'desc' => '网站公告发布'],
     'statistics' => ['icon' => 'fa-chart-line', 'title' => '消费统计', 'desc' => '运营数据分析']
 ];
@@ -484,6 +563,7 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 .badge-warning{background:#fffbeb;color:#d97706}
 .badge-info{background:#eff6ff;color:#2563eb}
 .badge-purple{background:#f5f3ff;color:#7c3aed}
+.badge-gray{background:#f3f4f6;color:#6b7280}
 
 /* 标签页 */
 .tabs{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap;background:var(--gray-100);padding:6px;border-radius:12px}
@@ -816,6 +896,20 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
         <label class="form-label">允许的邮箱后缀</label>
         <input type="text" name="email_domain_whitelist" value="<?php echo h(conf('email_domain_whitelist','')); ?>" class="form-control" placeholder="@qq.com,@gmail.com,@outlook.com">
         <div class="form-tip">多个后缀用英文逗号隔开，例如：@qq.com,@gmail.com（需先开启上方开关）</div>
+    </div>
+</div>
+</div>
+
+<div class="card" style="margin-top:20px;background:var(--gray-100)">
+<h4 style="margin-bottom:12px;color:var(--gray-700)"><i class="fas fa-headset"></i> 工单通知</h4>
+<div class="form-row">
+    <div class="form-group">
+        <label class="form-label">工单状态变更邮件通知</label>
+        <select name="mail_notify_ticket" class="form-control">
+            <option value="1" <?php echo conf('mail_notify_ticket','1')==='1'?'selected':''; ?>>开启</option>
+            <option value="0" <?php echo conf('mail_notify_ticket','1')!=='1'?'selected':''; ?>>关闭</option>
+        </select>
+        <div class="form-tip">管理员回复或关闭工单时，自动发送邮件提醒用户</div>
     </div>
 </div>
 </div>
@@ -1574,47 +1668,212 @@ document.addEventListener('click', function(e) {
 </div>
 </div>
 
-<div class="card">
-<div class="card-header">
-<h3 class="card-title"><i class="fas fa-coins"></i> 积分套餐价格</h3>
-<span class="badge badge-purple">单位：元</span>
-</div>
-<div class="form-row">
-<div class="form-group">
-<label class="form-label">200 积分</label>
-<div style="display:flex;align-items:center;gap:8px">
-<span style="font-size:1.5rem;color:var(--primary-solid)">¥</span>
-<input type="number" step="0.01" name="points_200_price" value="<?php echo h(conf('points_200_price','10')); ?>" class="form-control">
-</div>
-</div>
-<div class="form-group">
-<label class="form-label">400 积分</label>
-<div style="display:flex;align-items:center;gap:8px">
-<span style="font-size:1.5rem;color:var(--primary-solid)">¥</span>
-<input type="number" step="0.01" name="points_400_price" value="<?php echo h(conf('points_400_price','18')); ?>" class="form-control">
-</div>
-</div>
-</div>
-<div class="form-row">
-<div class="form-group">
-<label class="form-label">1000 积分</label>
-<div style="display:flex;align-items:center;gap:8px">
-<span style="font-size:1.5rem;color:var(--primary-solid)">¥</span>
-<input type="number" step="0.01" name="points_1000_price" value="<?php echo h(conf('points_1000_price','40')); ?>" class="form-control">
-</div>
-</div>
-<div class="form-group">
-<label class="form-label">3000 积分</label>
-<div style="display:flex;align-items:center;gap:8px">
-<span style="font-size:1.5rem;color:var(--primary-solid)">¥</span>
-<input type="number" step="0.01" name="points_3000_price" value="<?php echo h(conf('points_3000_price','100')); ?>" class="form-control">
-</div>
-</div>
-</div>
-</div>
-
 <button type="submit" class="btn btn-primary" style="margin-top:8px"><i class="fas fa-save"></i> 保存价格设置</button>
 </form>
+<?php endif; ?>
+
+<!-- 充值套餐管理 -->
+<?php if($page==='recharge_packages'):
+$pkgEdit = null;
+if (isset($_GET['edit'])) {
+    $stmt = $DB->prepare("SELECT * FROM recharge_packages WHERE id=?");
+    $stmt->execute([intval($_GET['edit'])]);
+    $pkgEdit = $stmt->fetch();
+}
+$pkgList = $DB->query("SELECT * FROM recharge_packages ORDER BY sort_order,id")->fetchAll();
+?>
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-coins"></i> 充值套餐管理</h3>
+</div>
+<form method="post" class="form-row">
+<input type="hidden" name="action" value="<?php echo $pkgEdit ? 'edit_recharge_package' : 'add_recharge_package'; ?>">
+<?php if ($pkgEdit): ?><input type="hidden" name="id" value="<?php echo $pkgEdit['id']; ?>"><?php endif; ?>
+<div class="form-group">
+<label class="form-label">积分数量</label>
+<input type="number" name="points" min="1" required class="form-control" value="<?php echo $pkgEdit ? $pkgEdit['points'] : ''; ?>" placeholder="如 500">
+</div>
+<div class="form-group">
+<label class="form-label">价格（元）</label>
+<input type="number" step="0.01" name="price" min="0.01" required class="form-control" value="<?php echo $pkgEdit ? $pkgEdit['price'] : ''; ?>" placeholder="如 20">
+</div>
+<div class="form-group">
+<label class="form-label">排序 <span style="color:var(--gray-500);font-weight:normal">(越小越靠前)</span></label>
+<input type="number" name="sort_order" class="form-control" value="<?php echo $pkgEdit ? $pkgEdit['sort_order'] : '0'; ?>">
+</div>
+<div style="display:flex;align-items:flex-end;gap:10px">
+<button type="submit" class="btn btn-primary"><i class="fas fa-<?php echo $pkgEdit ? 'save' : 'plus'; ?>"></i> <?php echo $pkgEdit ? '保存修改' : '添加套餐'; ?></button>
+<?php if ($pkgEdit): ?><a href="?page=recharge_packages" class="btn btn-outline">取消</a><?php endif; ?>
+</div>
+</form>
+</div>
+
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-list"></i> 套餐列表</h3>
+</div>
+<div class="table-wrapper">
+<table>
+<thead><tr><th>积分</th><th>价格</th><th>排序</th><th>状态</th><th>操作</th></tr></thead>
+<tbody>
+<?php if(empty($pkgList)): ?>
+<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--gray-400)"><i class="fas fa-coins" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>暂无套餐，请在上方添加</td></tr>
+<?php else: foreach($pkgList as $p): ?>
+<tr>
+<td><?php echo number_format($p['points']); ?></td>
+<td>¥<?php echo $p['price']; ?></td>
+<td><?php echo $p['sort_order']; ?></td>
+<td><span class="badge <?php echo $p['status'] ? 'badge-success' : 'badge-gray'; ?>"><?php echo $p['status'] ? '上架' : '下架'; ?></span></td>
+<td>
+<a href="?page=recharge_packages&edit=<?php echo $p['id']; ?>" class="btn btn-sm btn-primary"><i class="fas fa-edit"></i> 编辑</a>
+<form method="post" style="display:inline">
+<input type="hidden" name="action" value="toggle_recharge_package">
+<input type="hidden" name="id" value="<?php echo $p['id']; ?>">
+<input type="hidden" name="status" value="<?php echo $p['status'] ? 0 : 1; ?>">
+<button type="submit" class="btn btn-sm <?php echo $p['status'] ? 'btn-outline' : 'btn-success'; ?>"><?php echo $p['status'] ? '下架' : '上架'; ?></button>
+</form>
+<form method="post" style="display:inline" onsubmit="return confirm('确定删除？')">
+<input type="hidden" name="action" value="del_recharge_package">
+<input type="hidden" name="id" value="<?php echo $p['id']; ?>">
+<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+</form>
+</td>
+</tr>
+<?php endforeach; endif; ?>
+</tbody>
+</table>
+</div>
+</div>
+<?php endif; ?>
+
+<!-- 工单管理 -->
+<?php if($page==='tickets'):
+$tkFilter = $_GET['filter'] ?? 'all';
+$tkWhere = '';
+if ($tkFilter === 'pending') $tkWhere = 'WHERE t.status=0';
+elseif ($tkFilter === 'replied') $tkWhere = 'WHERE t.status=1';
+elseif ($tkFilter === 'closed') $tkWhere = 'WHERE t.status=2';
+
+$tkList = $DB->query("SELECT t.*, u.email as user_email, u.nickname as user_nickname, vm.name as model_name, vh.account as vhost_account FROM tickets t LEFT JOIN users u ON t.user_id=u.id LEFT JOIN vhosts vh ON t.vhost_id=vh.id LEFT JOIN vhost_models vm ON vh.model_id=vm.id {$tkWhere} ORDER BY t.updated_at DESC")->fetchAll();
+$tkPending = $DB->query("SELECT COUNT(*) as c FROM tickets WHERE status=0")->fetch()['c'];
+$tkStatusMap = [0=>'待处理',1=>'已回复',2=>'已关闭'];
+$tkStatusBadge = [0=>'badge-warning',1=>'badge-success',2=>'badge-gray'];
+
+$viewTicket = isset($_GET['view']) ? intval($_GET['view']) : 0;
+if ($viewTicket > 0):
+    $stmt = $DB->prepare("SELECT t.*, u.email as user_email, u.nickname as user_nickname, vm.name as model_name, vh.account as vhost_account FROM tickets t LEFT JOIN users u ON t.user_id=u.id LEFT JOIN vhosts vh ON t.vhost_id=vh.id LEFT JOIN vhost_models vm ON vh.model_id=vm.id WHERE t.id=?");
+    $stmt->execute([$viewTicket]);
+    $vd = $stmt->fetch();
+    if ($vd):
+        $vdReplies = $DB->prepare("SELECT tr.*, u.nickname as user_nickname, a.username as admin_username FROM ticket_replies tr LEFT JOIN users u ON tr.user_id=u.id LEFT JOIN admins a ON tr.admin_id=a.id WHERE tr.ticket_id=? ORDER BY tr.created_at ASC");
+        $vdReplies->execute([$viewTicket]);
+        $vdReplyList = $vdReplies->fetchAll();
+?>
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-headset"></i> 工单 #<?php echo $vd['id']; ?> 详情</h3>
+<a href="?page=tickets&filter=<?php echo $tkFilter; ?>" class="btn btn-sm btn-outline"><i class="fas fa-arrow-left"></i> 返回列表</a>
+</div>
+<div style="padding:16px 0">
+<div style="margin-bottom:16px">
+<span class="badge badge-lg <?php echo $tkStatusBadge[$vd['status']]; ?>"><?php echo $tkStatusMap[$vd['status']]; ?></span>
+</div>
+<div style="margin-bottom:8px"><strong>标题：</strong><?php echo h($vd['subject']); ?></div>
+<div style="margin-bottom:8px;font-size:.9rem;color:var(--gray-500)">
+<strong>提交人：</strong><?php echo h($vd['user_nickname'] ?: $vd['user_email']); ?> &nbsp;|&nbsp;
+<strong>时间：</strong><?php echo $vd['created_at']; ?>
+<?php if ($vd['vhost_account']): ?>
+&nbsp;|&nbsp; <strong>关联主机：</strong><?php echo h($vd['model_name'].' - '.$vd['vhost_account']); ?>
+<?php endif; ?>
+</div>
+</div>
+<div style="border-top:1px solid var(--border-color);padding-top:16px">
+<?php foreach($vdReplyList as $r): $isAdminR = !empty($r['admin_id']); ?>
+<div style="margin-bottom:16px;padding:14px 16px;border-radius:10px;<?php echo $isAdminR ? 'background:linear-gradient(135deg,rgba(102,126,234,.08),rgba(118,75,162,.08));border-left:3px solid #667eea' : 'background:var(--gray-50);border-left:3px solid #10b981' ?>">
+<div style="display:flex;justify-content:space-between;margin-bottom:6px">
+<span style="font-weight:600;font-size:.9rem"><?php echo $isAdminR ? '<i class="fas fa-user-shield"></i> 管理员 ('.h($r['admin_username']).')' : '<i class="fas fa-user"></i> '.h($r['user_nickname'] ?: '用户'); ?></span>
+<span style="font-size:.8rem;color:var(--gray-400)"><?php echo $r['created_at']; ?></span>
+</div>
+<div style="font-size:.9rem;line-height:1.7;word-break:break-all"><?php echo nl2br(h($r['content'])); ?></div>
+</div>
+<?php endforeach; ?>
+</div>
+<?php if ($vd['status'] != 2): ?>
+<div style="border-top:1px solid var(--border-color);padding-top:16px;margin-top:8px">
+<form method="post">
+<input type="hidden" name="action" value="admin_reply_ticket">
+<input type="hidden" name="ticket_id" value="<?php echo $vd['id']; ?>">
+<div class="form-group">
+<label class="form-label">管理员回复</label>
+<textarea name="content" rows="4" required class="form-control" placeholder="输入回复内容..."></textarea>
+</div>
+<div style="display:flex;gap:10px">
+<button type="submit" class="btn btn-primary"><i class="fas fa-reply"></i> 回复</button>
+<button type="submit" name="action" value="close_ticket" class="btn btn-danger" onclick="return confirm('确定关闭此工单？')"><i class="fas fa-times-circle"></i> 回复并关闭</button>
+</div>
+</form>
+</div>
+<?php else: ?>
+<div style="text-align:center;padding:16px;color:var(--gray-400);border-top:1px solid var(--border-color);margin-top:8px">
+<i class="fas fa-lock" style="margin-right:6px"></i>此工单已关闭
+<form method="post" style="display:inline;margin-left:12px" onsubmit="return confirm('确定删除此工单？')">
+<input type="hidden" name="action" value="del_ticket">
+<input type="hidden" name="id" value="<?php echo $vd['id']; ?>">
+<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i> 删除</button>
+</form>
+</div>
+<?php endif; ?>
+</div>
+<?php else: ?>
+<div class="card"><div class="card-header"><h3>工单不存在</h3></div><p style="padding:20px;color:var(--gray-400)"><a href="?page=tickets">返回列表</a></p></div>
+<?php endif; ?>
+<?php else: ?>
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-headset"></i> 工单管理</h3>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<a href="?page=tickets&filter=all" class="btn btn-sm <?php echo $tkFilter==='all'?'btn-primary':'btn-outline'; ?>">全部</a>
+<a href="?page=tickets&filter=pending" class="btn btn-sm <?php echo $tkFilter==='pending'?'btn-warning':'btn-outline'; ?>">待处理 <?php if($tkPending>0) echo "({$tkPending})"; ?></a>
+<a href="?page=tickets&filter=replied" class="btn btn-sm <?php echo $tkFilter==='replied'?'btn-success':'btn-outline'; ?>">已回复</a>
+<a href="?page=tickets&filter=closed" class="btn btn-sm <?php echo $tkFilter==='closed'?'btn-outline':'btn-outline'; ?>">已关闭</a>
+</div>
+</div>
+<div class="table-wrapper">
+<table>
+<thead><tr><th>ID</th><th>标题</th><th>提交人</th><th>关联主机</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead>
+<tbody>
+<?php if(empty($tkList)): ?>
+<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--gray-400)"><i class="fas fa-headset" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>暂无工单</td></tr>
+<?php else: foreach($tkList as $tk): ?>
+<tr>
+<td>#<?php echo $tk['id']; ?></td>
+<td><?php echo h($tk['subject']); ?></td>
+<td><?php echo h($tk['user_nickname'] ?: substr($tk['user_email'],0,3).'***'); ?></td>
+<td><?php echo $tk['vhost_account'] ? h($tk['model_name'].' - '.$tk['vhost_account']) : '<span style="color:var(--gray-400)">-</span>'; ?></td>
+<td><span class="badge <?php echo $tkStatusBadge[$tk['status']]; ?>"><?php echo $tkStatusMap[$tk['status']]; ?></span></td>
+<td style="font-size:.85rem;color:var(--gray-400)"><?php echo date('Y-m-d H:i', strtotime($tk['updated_at'])); ?></td>
+<td>
+<a href="?page=tickets&view=<?php echo $tk['id']; ?>" class="btn btn-sm btn-primary"><i class="fas fa-eye"></i> 查看</a>
+<?php if($tk['status']!=2): ?>
+<form method="post" style="display:inline" onsubmit="return confirm('确定关闭？')">
+<input type="hidden" name="action" value="close_ticket">
+<input type="hidden" name="ticket_id" value="<?php echo $tk['id']; ?>">
+<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-times"></i></button>
+</form>
+<?php endif; ?>
+<form method="post" style="display:inline" onsubmit="return confirm('确定删除？')">
+<input type="hidden" name="action" value="del_ticket">
+<input type="hidden" name="id" value="<?php echo $tk['id']; ?>">
+<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+</form>
+</td>
+</tr>
+<?php endforeach; endif; ?>
+</tbody>
+</table>
+</div>
+</div>
+<?php endif; ?>
 <?php endif; ?>
 
 <!-- 优惠码管理 -->
