@@ -44,7 +44,8 @@
 - **Registration bonus**: New users receive points upon registration
 - **Referral rewards**: Earn points by inviting friends to register
 - **Points top-up**: Purchase points online via EPay
-- **Coupon codes**: Support discount coupons for flexible marketing
+- **Custom Recharge Packages**: Admin can flexibly add/edit/list/unlist points packages
+- **Coupon codes**: Admin can generate discount coupons with expiry, usage limits and applicable plans
 
 ### 🔐 User System
 
