@@ -465,7 +465,7 @@ $totalUsers = $DB->query("SELECT COUNT(*) as c FROM users")->fetch()['c'];
 $totalVhosts = $DB->query("SELECT COUNT(*) as c FROM vhosts")->fetch()['c'];
 $todayVisits = $DB->query("SELECT COUNT(*) as c FROM visit_logs WHERE visit_date=CURDATE()")->fetch()['c'];
 $totalOrders = $DB->query("SELECT COUNT(*) as c FROM orders WHERE status=1")->fetch()['c'];
-$pages = ['dashboard','config','servers','vhost_models','vhosts','users','prices','recharge_packages','coupons','tickets','announcement','statistics'];
+$pages = ['dashboard','config','servers','vhost_models','vhosts','users','prices','recharge_packages','coupons','tickets','announcement','statistics','about'];
 if (!in_array($page, $pages)) $page = 'dashboard';
 
 $pageTitles = [
@@ -480,7 +480,8 @@ $pageTitles = [
     'coupons' => ['icon' => 'fa-ticket-alt', 'title' => '优惠码管理', 'desc' => '优惠码创建与管理'],
     'tickets' => ['icon' => 'fa-headset', 'title' => '工单管理', 'desc' => '用户工单处理'],
     'announcement' => ['icon' => 'fa-bullhorn', 'title' => '公告管理', 'desc' => '网站公告发布'],
-    'statistics' => ['icon' => 'fa-chart-line', 'title' => '消费统计', 'desc' => '运营数据分析']
+    'statistics' => ['icon' => 'fa-chart-line', 'title' => '消费统计', 'desc' => '运营数据分析'],
+    'about' => ['icon' => 'fa-info-circle', 'title' => '关于项目', 'desc' => '关于 StarIDC']
 ];
 ?>
 <!DOCTYPE html>
@@ -713,6 +714,7 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 </nav>
 <div class="sidebar-footer">
 <a href="../index.php"><i class="fas fa-home"></i> 返回前台首页</a>
+<a href="?page=about" class="<?php echo $page==='about'?'active':''; ?>" style="margin-top:10px"><i class="fas fa-info-circle"></i> 关于项目</a>
 </div>
 </aside>
 
@@ -2318,6 +2320,55 @@ $pointsData = $pointsConsume->fetch();
 <?php endif; ?>
 </tbody>
 </table>
+</div>
+</div>
+<?php endif; ?>
+
+<!-- 关于项目 -->
+<?php if($page==='about'):
+$latestInfo = null;
+$checking = isset($_GET['check_update']);
+if ($checking) {
+    unset($_SESSION['staridc_update_check']);
+    $latestInfo = checkUpdate();
+}
+?>
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-star"></i> 关于 StarIDC</h3>
+</div>
+<div style="text-align:center;padding:30px 20px">
+<div style="font-size:3rem;color:var(--primary-solid);margin-bottom:16px"><i class="fas fa-cloud"></i></div>
+<h2 style="margin:0 0 8px">StarIDC</h2>
+<p style="color:var(--gray-500);margin:0 0 24px">轻量级虚拟主机分销管理平台</p>
+<p style="font-size:1.1rem;color:var(--dark);margin:0 0 30px"><i class="fas fa-heart" style="color:#ef4444"></i> <strong>仰望星辰工作室出品</strong></p>
+
+<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:30px">
+<a href="?page=about&check_update=1" class="btn btn-primary"><i class="fas fa-sync-alt"></i> 检测更新</a>
+<button type="button" class="btn btn-outline" onclick="document.getElementById('donateBox').style.display=document.getElementById('donateBox').style.display==='none'?'block':'none'"><i class="fas fa-heart"></i> 赞助我们</button>
+</div>
+
+<div id="donateBox" style="display:none;max-width:360px;margin:0 auto;text-align:center">
+<p style="color:var(--gray-500);margin-bottom:12px">感谢您的支持，StarIDC 因您变得更好</p>
+<img src="https://clearlove.kazx.top/%E6%8D%90%E8%B5%A0.webp" alt="赞助我们" style="max-width:100%;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.1)">
+</div>
+
+<?php if($checking): ?>
+<div class="alert <?php echo $latestInfo ? 'alert-warning' : 'alert-success'; ?>" style="margin-top:24px;text-align:left">
+<?php if($latestInfo): ?>
+<i class="fas fa-bell"></i> 发现新版本 <strong><?php echo h($latestInfo['version']); ?></strong>，当前版本 <strong><?php echo h(conf('current_version','1.0.0')); ?></strong>。
+<?php if(!empty($latestInfo['release_note'])): ?><br><span style="opacity:.9"><?php echo nl2br(h($latestInfo['release_note'])); ?></span><?php endif; ?>
+<br><a href="<?php echo h($latestInfo['download_url']); ?>" target="_blank" class="btn btn-primary" style="margin-top:12px;background:#f59e0b;border-color:#f59e0b"><i class="fas fa-download"></i> 立即下载</a>
+<?php else: ?>
+<i class="fas fa-check-circle"></i> 当前已是最新版本 <strong><?php echo h(conf('current_version','1.0.0')); ?></strong>。
+<?php endif; ?>
+</div>
+<?php endif; ?>
+
+<div style="margin-top:30px;padding-top:20px;border-top:1px solid var(--gray-200);color:var(--gray-500);font-size:.85rem">
+<p style="margin:4px 0">当前版本：<?php echo h(conf('current_version','1.0.0')); ?></p>
+<p style="margin:4px 0">更新接口：<?php echo h(conf('update_api_url','https://staridc.fangqihang.cn/api.php')); ?></p>
+</div>
 </div>
 </div>
 <?php endif; ?>
