@@ -10,7 +10,7 @@ include ROOT . 'rd/MNBT_API.php';
  */
 function checkUpdate() {
     $apiUrl = trim(conf('update_api_url', ''));
-    $currentVersion = trim(conf('current_version', '1.0.0'));
+    $currentVersion = trim(conf('current_version', '1.2.0'));
     if ($apiUrl === '' || $currentVersion === '') {
         return null;
     }
@@ -750,7 +750,7 @@ $latestUpdate = checkUpdate();
 <div style="flex:1;min-width:260px">
 <h3 style="margin:0 0 8px;font-size:1.1rem;color:#92400e">发现新版本</h3>
 <p style="margin:0 0 12px;color:#78350f;line-height:1.6">
-当前版本 <strong><?php echo h(conf('current_version','1.0.0')); ?></strong>，官方最新版本为 <strong><?php echo h($latestUpdate['version']); ?></strong>。
+当前版本 <strong><?php echo h(conf('current_version','1.2.0')); ?></strong>，官方最新版本为 <strong><?php echo h($latestUpdate['version']); ?></strong>。
 <?php if(!empty($latestUpdate['release_note'])): ?><br><span style="color:#92400e"><?php echo nl2br(h($latestUpdate['release_note'])); ?></span><?php endif; ?>
 </p>
 <a href="<?php echo h($latestUpdate['download_url']); ?>" target="_blank" class="btn btn-primary" style="background:#f59e0b;border-color:#f59e0b"><i class="fas fa-download"></i> 立即下载更新</a>
@@ -1015,7 +1015,7 @@ $latestUpdate = checkUpdate();
 <div class="form-row">
 <div class="form-group">
 <label class="form-label">当前版本号</label>
-<input type="text" name="current_version" value="<?php echo h(conf('current_version','1.0.2')); ?>" class="form-control" placeholder="例如：1.0.2">
+<input type="text" name="current_version" value="<?php echo h(conf('current_version','1.2.0')); ?>" class="form-control" placeholder="例如：1.2.0">
 <div class="form-tip">用于与更新服务器比对，检测到新版本时会在后台提示</div>
 </div>
 <div class="form-group">
@@ -2384,17 +2384,17 @@ if ($checking) {
 <?php if($checking): ?>
 <div class="alert <?php echo $latestInfo ? 'alert-warning' : 'alert-success'; ?>" style="margin-top:24px;text-align:left">
 <?php if($latestInfo): ?>
-<i class="fas fa-bell"></i> 发现新版本 <strong><?php echo h($latestInfo['version']); ?></strong>，当前版本 <strong><?php echo h(conf('current_version','1.0.0')); ?></strong>。
+<i class="fas fa-bell"></i> 发现新版本 <strong><?php echo h($latestInfo['version']); ?></strong>，当前版本 <strong><?php echo h(conf('current_version','1.2.0')); ?></strong>。
 <?php if(!empty($latestInfo['release_note'])): ?><br><span style="opacity:.9"><?php echo nl2br(h($latestInfo['release_note'])); ?></span><?php endif; ?>
 <br><a href="<?php echo h($latestInfo['download_url']); ?>" target="_blank" class="btn btn-primary" style="margin-top:12px;background:#f59e0b;border-color:#f59e0b"><i class="fas fa-download"></i> 立即下载</a>
 <?php else: ?>
-<i class="fas fa-check-circle"></i> 当前已是最新版本 <strong><?php echo h(conf('current_version','1.0.0')); ?></strong>。
+<i class="fas fa-check-circle"></i> 当前已是最新版本 <strong><?php echo h(conf('current_version','1.2.0')); ?></strong>。
 <?php endif; ?>
 </div>
 <?php endif; ?>
 
 <div style="margin-top:30px;padding-top:20px;border-top:1px solid var(--gray-200);color:var(--gray-500);font-size:.85rem">
-<p style="margin:4px 0">当前版本：<?php echo h(conf('current_version','1.0.0')); ?></p>
+<p style="margin:4px 0">当前版本：<?php echo h(conf('current_version','1.2.0')); ?></p>
 <p style="margin:4px 0">更新接口：<?php echo h(conf('update_api_url','https://staridc.fangqihang.cn/api.php')); ?></p>
 </div>
 </div>

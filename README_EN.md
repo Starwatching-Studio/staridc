@@ -81,6 +81,7 @@
 - SMTP email sending (powered by PHPMailer)
 - Registration verification emails
 - Automatic expiry alerts 5 days before host expiration (cron job)
+- Ticket status change notifications (user notified when admin replies/closes)
 
 ***
 

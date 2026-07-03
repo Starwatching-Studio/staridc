@@ -204,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'register_points_enabled' => '1', 'register_points' => '100',
                     'points_200_price' => '10', 'points_400_price' => '18',
                     'points_1000_price' => '40', 'points_3000_price' => '100',
-                    'current_version' => '1.0.2',
+                    'current_version' => '1.2.0',
                     'update_api_url' => 'https://staridc.fangqihang.cn/api.php',
                     'max_hosts_per_user' => '5',
                 ];

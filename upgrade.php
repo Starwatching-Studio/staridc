@@ -251,7 +251,7 @@ if ($authorized) {
 
         // === 10. 补充版本更新配置项 ===
         $updateConfigs = [
-            'current_version' => '1.0.2',
+            'current_version' => '1.2.0',
             'update_api_url' => 'https://staridc.fangqihang.cn/api.php',
         ];
         $insertUpdateStmt = $pdo->prepare("INSERT IGNORE INTO config(k,v) VALUES(?,?)");
