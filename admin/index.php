@@ -4,6 +4,57 @@ define('ROOT', dirname(__DIR__) . '/');
 include ROOT . 'rd/bootstrap.php';
 include ROOT . 'rd/MNBT_API.php';
 
+/**
+ * 检测官方版本更新
+ * 返回数组表示有新版本，返回 null 表示无更新或检测失败
+ */
+function checkUpdate() {
+    $apiUrl = trim(conf('update_api_url', ''));
+    $currentVersion = trim(conf('current_version', '1.0.0'));
+    if ($apiUrl === '' || $currentVersion === '') {
+        return null;
+    }
+    // 使用 Session 缓存 1 小时，避免频繁请求
+    $cacheKey = 'staridc_update_check';
+    $cached = $_SESSION[$cacheKey] ?? null;
+    if ($cached && ($cached['time'] ?? 0) > time() - 3600) {
+        return $cached['hasUpdate'] ? $cached['data'] : null;
+    }
+
+    $latest = null;
+    $url = $apiUrl . (strpos($apiUrl, '?') === false ? '?' : '&') . 'action=latest';
+    $ctx = stream_context_create([
+        'http' => [
+            'timeout' => 5,
+            'user_agent' => 'StarIDC-UpdateCheck/1.0',
+            'follow_location' => true,
+        ],
+        'ssl' => [
+            'verify_peer' => true,
+            'verify_peer_name' => true,
+        ],
+    ]);
+    $response = @file_get_contents($url, false, $ctx);
+    if ($response !== false) {
+        $json = json_decode($response, true);
+        if (is_array($json) && !empty($json['success']) && !empty($json['version'])) {
+            $latest = $json;
+        }
+    }
+
+    $hasUpdate = false;
+    if ($latest && !empty($latest['version'])) {
+        $hasUpdate = version_compare($latest['version'], $currentVersion, '>');
+    }
+
+    $_SESSION[$cacheKey] = [
+        'time' => time(),
+        'hasUpdate' => $hasUpdate,
+        'data' => $hasUpdate ? $latest : null,
+    ];
+    return $hasUpdate ? $latest : null;
+}
+
 if (file_exists(ROOT . 'config.php')) {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admin_login'])) {
         $username = trim($_POST['username'] ?? '');
@@ -92,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'sign_min','sign_max','theme','announcement',
                 'register_points_enabled','register_points',
                 'referral_enabled','referral_reward_points',
-                'mail_notify_ticket'];
+                'mail_notify_ticket','current_version','update_api_url'];
             foreach ($fields as $f) {
                 if (isset($_POST[$f])) setConf($f, trim($_POST[$f]));
             }
@@ -686,7 +737,26 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 </div>
 
 <!-- 仪表盘 -->
-<?php if($page==='dashboard'): ?>
+<?php if($page==='dashboard'):
+$latestUpdate = checkUpdate();
+?>
+<?php if($latestUpdate): ?>
+<div class="card" style="border-left:4px solid var(--warning);background:linear-gradient(135deg,#fffbeb,#fef3c7);margin-bottom:20px">
+<div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
+<div style="font-size:2rem;color:var(--warning)"><i class="fas fa-bell"></i></div>
+<div style="flex:1;min-width:260px">
+<h3 style="margin:0 0 8px;font-size:1.1rem;color:#92400e">发现新版本</h3>
+<p style="margin:0 0 12px;color:#78350f;line-height:1.6">
+当前版本 <strong><?php echo h(conf('current_version','1.0.0')); ?></strong>，官方最新版本为 <strong><?php echo h($latestUpdate['version']); ?></strong>。
+<?php if(!empty($latestUpdate['release_note'])): ?><br><span style="color:#92400e"><?php echo nl2br(h($latestUpdate['release_note'])); ?></span><?php endif; ?>
+</p>
+<a href="<?php echo h($latestUpdate['download_url']); ?>" target="_blank" class="btn btn-primary" style="background:#f59e0b;border-color:#f59e0b"><i class="fas fa-download"></i> 立即下载更新</a>
+<a href="?page=config" class="btn btn-outline" style="margin-left:8px">修改版本号</a>
+</div>
+</div>
+</div>
+<?php endif; ?>
+
 <div class="stats-grid">
 <div class="stat-card fade-in">
 <div class="icon users"><i class="fas fa-users"></i></div>
@@ -938,6 +1008,18 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 <div class="form-group">
 <label class="form-label">网站名称</label>
 <input type="text" name="site_name" value="<?php echo h(conf('site_name','云主机')); ?>" class="form-control">
+</div>
+<div class="form-row">
+<div class="form-group">
+<label class="form-label">当前版本号</label>
+<input type="text" name="current_version" value="<?php echo h(conf('current_version','1.0.2')); ?>" class="form-control" placeholder="例如：1.0.2">
+<div class="form-tip">用于与更新服务器比对，检测到新版本时会在后台提示</div>
+</div>
+<div class="form-group">
+<label class="form-label">版本更新 API 地址</label>
+<input type="url" name="update_api_url" value="<?php echo h(conf('update_api_url','https://staridc.fangqihang.cn/api.php')); ?>" class="form-control" placeholder="https://staridc.fangqihang.cn/api.php">
+<div class="form-tip">官方更新接口，留空则关闭自动检测</div>
+</div>
 </div>
 <div class="form-group">
 <label class="form-label">选择主题</label>

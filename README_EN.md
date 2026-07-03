@@ -242,7 +242,7 @@ Create a new folder and `style.css` under `theme/`, overriding the system-define
 
 ### Database Extension
 
-All table creation statements are managed centrally in [install/index.php](file:///d:/yun/26-5-6/install/index.php#L36-L113). New fields or tables can be maintained there.
+All table creation statements are managed centrally in [install/index.php](file:///d:/yun/26-5-6/install/index.php#L36-L200). New fields or tables can be maintained there. Existing users should run [upgrade.php](file:///d:/yun/26-5-6/upgrade.php) for database migration.
 
 ### Core Business Flow
 

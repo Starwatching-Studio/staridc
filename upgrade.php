@@ -249,7 +249,22 @@ if ($authorized) {
             }
         }
 
-        // === 10. 创建充值套餐表 ===
+        // === 10. 补充版本更新配置项 ===
+        $updateConfigs = [
+            'current_version' => '1.0.2',
+            'update_api_url' => 'https://staridc.fangqihang.cn/api.php',
+        ];
+        $insertUpdateStmt = $pdo->prepare("INSERT IGNORE INTO config(k,v) VALUES(?,?)");
+        foreach ($updateConfigs as $key => $val) {
+            if (!in_array($key, $configKeys)) {
+                $insertUpdateStmt->execute([$key, $val]);
+                $logs[] = "✅ 已添加配置项：{$key}";
+            } else {
+                $logs[] = "⏭️ 配置项已存在：{$key}";
+            }
+        }
+
+        // === 11. 创建充值套餐表 ===
         if (!in_array('recharge_packages', $tables)) {
             $pdo->exec("CREATE TABLE recharge_packages (
                 id INT AUTO_INCREMENT PRIMARY KEY,
