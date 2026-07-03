@@ -72,7 +72,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     price INT NOT NULL DEFAULT 0,
                     status TINYINT NOT NULL DEFAULT 1,
                     sort_order INT NOT NULL DEFAULT 0,
-                    server_id INT NULL DEFAULT NULL
+                    server_id INT NULL DEFAULT NULL,
+                    max_per_user INT NOT NULL DEFAULT 0
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
                 $pdo->exec("CREATE TABLE IF NOT EXISTS vhosts (
@@ -205,6 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'points_1000_price' => '40', 'points_3000_price' => '100',
                     'current_version' => '1.0.2',
                     'update_api_url' => 'https://staridc.fangqihang.cn/api.php',
+                    'max_hosts_per_user' => '5',
                 ];
                 $stmt = $pdo->prepare("INSERT INTO config(k,v) VALUES(?,?) ON DUPLICATE KEY UPDATE v=VALUES(v)");
                 foreach ($defaults as $k => $v) {

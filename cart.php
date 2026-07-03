@@ -71,11 +71,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $loggedIn) {
                 $error = '积分不足，请先充值积分';
             }
             if (!$error) {
+                // 全局限购检查
+                $globalLimit = intval(conf('max_hosts_per_user', '5'));
                 $vhostCount = $DB->prepare("SELECT COUNT(*) as c FROM vhosts WHERE user_id=?");
                 $vhostCount->execute([$user['id']]);
-                if ($vhostCount->fetch()['c'] >= 5) {
-                    $error = '每人最多购买5台虚拟主机';
-                } else {
+                $totalVhosts = $vhostCount->fetch()['c'];
+                if ($globalLimit > 0 && $totalVhosts >= $globalLimit) {
+                    $error = '每人最多购买' . $globalLimit . '台虚拟主机';
+                }
+                // 型号限购检查
+                if (!$error) {
+                    $maxPerUser = isset($model['max_per_user']) ? intval($model['max_per_user']) : 0;
+                    if ($maxPerUser > 0) {
+                        $modelCount = $DB->prepare("SELECT COUNT(*) as c FROM vhosts WHERE user_id=? AND model_id=?");
+                        $modelCount->execute([$user['id'], $modelId]);
+                        if ($modelCount->fetch()['c'] >= $maxPerUser) {
+                            $error = '该型号每人最多购买' . $maxPerUser . '台';
+                        }
+                    }
+                }
+                if (!$error) {
                     $account = genVhostAccount($user['id'], $modelId);
                     $password = genVhostPassword();
                     $expireDate = date('Y-m-d', strtotime('+30 days'));

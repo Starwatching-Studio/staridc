@@ -143,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'sign_min','sign_max','theme','announcement',
                 'register_points_enabled','register_points',
                 'referral_enabled','referral_reward_points',
-                'mail_notify_ticket','current_version','update_api_url'];
+                'mail_notify_ticket','current_version','update_api_url','max_hosts_per_user'];
             foreach ($fields as $f) {
                 if (isset($_POST[$f])) setConf($f, trim($_POST[$f]));
             }
@@ -171,8 +171,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
         case 'add_model':
             $serverId = !empty($_POST['server_id']) ? intval($_POST['server_id']) : null;
-            $stmt = $DB->prepare("INSERT INTO vhost_models(name,web_space,db_space,flow,domain_limit,price,sort_order,server_id) VALUES(?,?,?,?,?,?,?,?)");
-            $stmt->execute([$_POST['name'],intval($_POST['web_space']),intval($_POST['db_space']),intval($_POST['flow']),intval($_POST['domain_limit']),intval($_POST['price']),intval($_POST['sort_order']),$serverId]);
+            $maxPerUser = intval($_POST['max_per_user'] ?? 0);
+            $stmt = $DB->prepare("INSERT INTO vhost_models(name,web_space,db_space,flow,domain_limit,price,sort_order,server_id,max_per_user) VALUES(?,?,?,?,?,?,?,?,?)");
+            $stmt->execute([$_POST['name'],intval($_POST['web_space']),intval($_POST['db_space']),intval($_POST['flow']),intval($_POST['domain_limit']),intval($_POST['price']),intval($_POST['sort_order']),$serverId,$maxPerUser]);
             $msg = '型号添加成功'; $msgType = 'success';
             break;
         case 'toggle_model':
@@ -1290,6 +1291,11 @@ function closeEditServer(){
 <?php endforeach; ?>
 </select>
 </div>
+<div class="form-group">
+<label class="form-label">每人限量</label>
+<input type="number" name="max_per_user" value="0" min="0" class="form-control" placeholder="0=不限">
+<div class="form-tip">0 表示不限购，大于 0 则限制每用户购买该型号的最大数量</div>
+</div>
 <div style="display:flex;align-items:flex-end">
 <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> 添加</button>
 </div>
@@ -1311,6 +1317,7 @@ function closeEditServer(){
 <th>流量</th>
 <th>域名数</th>
 <th>积分</th>
+<th>限量</th>
 <th>服务器</th>
 <th>状态</th>
 <th>操作</th>
@@ -1326,6 +1333,14 @@ function closeEditServer(){
 <td><?php echo $m['flow']; ?> GB</td>
 <td><?php echo $m['domain_limit']; ?></td>
 <td><span class="badge badge-purple"><?php echo $m['price']; ?> 积分</span></td>
+<td><?php
+$maxPerUser = isset($m['max_per_user']) ? intval($m['max_per_user']) : 0;
+if ($maxPerUser > 0) {
+    echo '<span class="badge badge-info">限' . $maxPerUser . '台</span>';
+} else {
+    echo '<span style="color:var(--gray-400)">不限</span>';
+}
+?></td>
 <td><?php echo $m['server_name'] ? h($m['server_name']) : '<span style="color:var(--gray-500)">默认</span>'; ?></td>
 <td>
 <?php if($m['status']): ?>
@@ -1749,6 +1764,19 @@ document.addEventListener('click', function(e) {
 <li>推荐码格式：系统自动生成，如 <code style="background:var(--gray-100);padding:2px 6px;border-radius:4px">INV8A3F2C</code></li>
 <li>推荐人可在个人中心查看自己的推荐码和推荐记录</li>
 </ul>
+</div>
+</div>
+
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-ban"></i> 购买限制</h3>
+</div>
+<div class="form-row">
+<div class="form-group">
+<label class="form-label">每用户最多购买主机数</label>
+<input type="number" name="max_hosts_per_user" value="<?php echo h(conf('max_hosts_per_user','5')); ?>" min="1" class="form-control">
+<p class="form-hint">全局限制：每个用户最多可购买的主机总数（0=不限）。各型号还可在"主机型号"中单独设置限量</p>
+</div>
 </div>
 </div>
 

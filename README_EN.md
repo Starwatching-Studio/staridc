@@ -60,11 +60,15 @@
 - **Dashboard**: Data statistics overview (users, hosts, servers, orders, visits)
 - **System Config**: MNBT integration, payment gateway, email service, site settings
 - **Server Management**: Add/edit/delete/toggle MNBT servers with connection testing
-- **Hosting Plan Management**: Add/listing control, assign server to each plan
+- **Hosting Plan Management**: Add/listing control, assign server to each plan, set per-plan purchase limits
 - **User Management**: Search/edit, batch points, batch delete
 - **Host Management**: View/delete/sync
+- **Recharge Package Management**: Custom points packages with list/unlist control
+- **Coupon Management**: Generate/edit/enable/disable/delete coupons
+- **Ticket Management**: View/reply/close/delete user tickets
 - **Announcement**: Homepage popup announcements
 - **Consumption Stats**: Order data analysis
+- **About Project**: Version check, sponsor entry
 
 ### 🎨 Theme System
 

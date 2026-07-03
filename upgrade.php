@@ -279,6 +279,29 @@ if ($authorized) {
             $logs[] = "⏭️ 表已存在：recharge_packages";
         }
 
+        // === 12. vhost_models 表添加 max_per_user 字段 ===
+        $vmCols = $pdo->query("SHOW COLUMNS FROM vhost_models")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('max_per_user', $vmCols)) {
+            $pdo->exec("ALTER TABLE vhost_models ADD COLUMN max_per_user INT NOT NULL DEFAULT 0");
+            $logs[] = "✅ 已添加字段：vhost_models.max_per_user";
+        } else {
+            $logs[] = "⏭️ 字段已存在：vhost_models.max_per_user";
+        }
+
+        // === 13. 补充全局限购配置项 ===
+        $limitConfigs = [
+            'max_hosts_per_user' => '5',
+        ];
+        $insertLimitStmt = $pdo->prepare("INSERT IGNORE INTO config(k,v) VALUES(?,?)");
+        foreach ($limitConfigs as $key => $val) {
+            if (!in_array($key, $configKeys)) {
+                $insertLimitStmt->execute([$key, $val]);
+                $logs[] = "✅ 已添加配置项：{$key}";
+            } else {
+                $logs[] = "⏭️ 配置项已存在：{$key}";
+            }
+        }
+
         $success = '数据库升级完成！共执行 ' . count($logs) . ' 项操作。';
     } catch (Exception $e) {
         $error = '升级失败：' . $e->getMessage();
