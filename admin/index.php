@@ -143,7 +143,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'sign_min','sign_max','theme','announcement',
                 'register_points_enabled','register_points',
                 'referral_enabled','referral_reward_points',
-                'mail_notify_ticket','current_version','update_api_url','max_hosts_per_user'];
+                'mail_notify_ticket','current_version','update_api_url','max_hosts_per_user',
+                'oauth_enabled','oauth_api_url','oauth_appid','oauth_appkey','oauth_types',
+                'oauth_icon_img_dingtalk','oauth_icon_text_dingtalk','oauth_icon_img_feishu','oauth_icon_text_feishu'];
             foreach ($fields as $f) {
                 if (isset($_POST[$f])) setConf($f, trim($_POST[$f]));
             }
@@ -172,9 +174,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'add_model':
             $serverId = !empty($_POST['server_id']) ? intval($_POST['server_id']) : null;
             $maxPerUser = intval($_POST['max_per_user'] ?? 0);
-            $stmt = $DB->prepare("INSERT INTO vhost_models(name,web_space,db_space,flow,domain_limit,price,sort_order,server_id,max_per_user) VALUES(?,?,?,?,?,?,?,?,?)");
-            $stmt->execute([$_POST['name'],intval($_POST['web_space']),intval($_POST['db_space']),intval($_POST['flow']),intval($_POST['domain_limit']),intval($_POST['price']),intval($_POST['sort_order']),$serverId,$maxPerUser]);
+            $categoryId = !empty($_POST['category_id']) ? intval($_POST['category_id']) : null;
+            $isElastic = isset($_POST['is_elastic']) ? 1 : 0;
+            $stmt = $DB->prepare("INSERT INTO vhost_models(name,web_space,db_space,flow,domain_limit,price,sort_order,server_id,max_per_user,category_id,is_elastic) VALUES(?,?,?,?,?,?,?,?,?,?,?)");
+            $stmt->execute([$_POST['name'],intval($_POST['web_space']),intval($_POST['db_space']),intval($_POST['flow']),intval($_POST['domain_limit']),intval($_POST['price']),intval($_POST['sort_order']),$serverId,$maxPerUser,$categoryId,$isElastic]);
+            $modelId = $DB->lastInsertId();
+            // 保存时长折扣
+            $DB->prepare("DELETE FROM vhost_model_durations WHERE model_id=?")->execute([$modelId]);
+            $durs = $_POST['dur'] ?? [];
+            foreach(['month','quarter','half_year','year','2year','3year','5year','10year'] as $dk) {
+                $enabled = isset($durs[$dk]['enabled']) ? 1 : 0;
+                $discount = intval($durs[$dk]['discount'] ?? 0);
+                $DB->prepare("INSERT INTO vhost_model_durations(model_id,duration_type,enabled,discount) VALUES(?,?,?,?)")->execute([$modelId, $dk, $enabled, $discount]);
+            }
+            // 保存弹性配置
+            $DB->prepare("DELETE FROM vhost_model_elastic WHERE model_id=?")->execute([$modelId]);
+            $elasticFields = ['web_space','db_space','flow','domain_limit'];
+            foreach($elasticFields as $ef) {
+                $e = $_POST['elastic'][$ef] ?? [];
+                $enabled = isset($e['enabled']) ? 1 : 0;
+                $min = intval($e['min'] ?? 0);
+                $max = intval($e['max'] ?? 0);
+                $step = intval($e['step'] ?? 1);
+                $price = intval($e['price'] ?? 0);
+                $DB->prepare("INSERT INTO vhost_model_elastic(model_id,field_name,min_value,max_value,step,unit_price,enabled) VALUES(?,?,?,?,?,?,?)")->execute([$modelId, $ef, $min, $max, $step, $price, $enabled]);
+            }
             $msg = '型号添加成功'; $msgType = 'success';
+            break;
+        case 'edit_model':
+            $mid = intval($_POST['id']);
+            $serverId = !empty($_POST['server_id']) ? intval($_POST['server_id']) : null;
+            $maxPerUser = intval($_POST['max_per_user'] ?? 0);
+            $categoryId = !empty($_POST['category_id']) ? intval($_POST['category_id']) : null;
+            $isElastic = isset($_POST['is_elastic']) ? 1 : 0;
+            $stmt = $DB->prepare("UPDATE vhost_models SET name=?,web_space=?,db_space=?,flow=?,domain_limit=?,price=?,sort_order=?,server_id=?,max_per_user=?,category_id=?,is_elastic=? WHERE id=?");
+            $stmt->execute([$_POST['name'],intval($_POST['web_space']),intval($_POST['db_space']),intval($_POST['flow']),intval($_POST['domain_limit']),intval($_POST['price']),intval($_POST['sort_order']),$serverId,$maxPerUser,$categoryId,$isElastic,$mid]);
+            // 保存时长折扣
+            $DB->prepare("DELETE FROM vhost_model_durations WHERE model_id=?")->execute([$mid]);
+            $durs = $_POST['dur'] ?? [];
+            foreach(['month','quarter','half_year','year','2year','3year','5year','10year'] as $dk) {
+                $enabled = isset($durs[$dk]['enabled']) ? 1 : 0;
+                $discount = intval($durs[$dk]['discount'] ?? 0);
+                $DB->prepare("INSERT INTO vhost_model_durations(model_id,duration_type,enabled,discount) VALUES(?,?,?,?)")->execute([$mid, $dk, $enabled, $discount]);
+            }
+            // 保存弹性配置
+            $DB->prepare("DELETE FROM vhost_model_elastic WHERE model_id=?")->execute([$mid]);
+            $elasticFields = ['web_space','db_space','flow','domain_limit'];
+            foreach($elasticFields as $ef) {
+                $e = $_POST['elastic'][$ef] ?? [];
+                $enabled = isset($e['enabled']) ? 1 : 0;
+                $min = intval($e['min'] ?? 0);
+                $max = intval($e['max'] ?? 0);
+                $step = intval($e['step'] ?? 1);
+                $price = intval($e['price'] ?? 0);
+                $DB->prepare("INSERT INTO vhost_model_elastic(model_id,field_name,min_value,max_value,step,unit_price,enabled) VALUES(?,?,?,?,?,?,?)")->execute([$mid, $ef, $min, $max, $step, $price, $enabled]);
+            }
+            $msg = '型号已更新'; $msgType = 'success';
             break;
         case 'toggle_model':
             $stmt = $DB->prepare("UPDATE vhost_models SET status=? WHERE id=?");
@@ -459,6 +514,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([intval($_POST['id'])]);
             $msg = '充值套餐已删除'; $msgType = 'success';
             break;
+        case 'add_category':
+            $name = trim($_POST['name'] ?? '');
+            $parentId = !empty($_POST['parent_id']) ? intval($_POST['parent_id']) : null;
+            $sortOrder = intval($_POST['sort_order'] ?? 0);
+            if (empty($name)) { $msg = '分类名称不能为空'; $msgType = 'error'; break; }
+            $level = 1;
+            if ($parentId) {
+                $stmtP = $DB->prepare("SELECT level FROM vhost_categories WHERE id=?");
+                $stmtP->execute([$parentId]);
+                $parent = $stmtP->fetch();
+                if ($parent) {
+                    $level = $parent['level'] + 1;
+                    if ($level > 3) { $msg = '最多支持三级分类'; $msgType = 'error'; break; }
+                }
+            }
+            $stmt = $DB->prepare("INSERT INTO vhost_categories(name,parent_id,level,sort_order) VALUES(?,?,?,?)");
+            $stmt->execute([$name, $parentId, $level, $sortOrder]);
+            $msg = '分类添加成功'; $msgType = 'success';
+            break;
+        case 'edit_category':
+            $id = intval($_POST['id'] ?? 0);
+            $name = trim($_POST['name'] ?? '');
+            $sortOrder = intval($_POST['sort_order'] ?? 0);
+            if (empty($name)) { $msg = '分类名称不能为空'; $msgType = 'error'; break; }
+            $stmt = $DB->prepare("UPDATE vhost_categories SET name=?,sort_order=? WHERE id=?");
+            $stmt->execute([$name, $sortOrder, $id]);
+            $msg = '分类已更新'; $msgType = 'success';
+            break;
+        case 'del_category':
+            $id = intval($_POST['id'] ?? 0);
+            // 检查是否有子分类
+            $chk = $DB->prepare("SELECT COUNT(*) as c FROM vhost_categories WHERE parent_id=?");
+            $chk->execute([$id]);
+            if ($chk->fetch()['c'] > 0) {
+                $msg = '该分类下还有子分类，无法删除'; $msgType = 'error';
+            } else {
+                // 检查是否有型号引用
+                $chk2 = $DB->prepare("SELECT COUNT(*) as c FROM vhost_models WHERE category_id=?");
+                $chk2->execute([$id]);
+                if ($chk2->fetch()['c'] > 0) {
+                    $msg = '该分类下还有主机型号，无法删除'; $msgType = 'error';
+                } else {
+                    $stmt = $DB->prepare("DELETE FROM vhost_categories WHERE id=?");
+                    $stmt->execute([$id]);
+                    $msg = '分类已删除'; $msgType = 'success';
+                }
+            }
+            break;
     }
 }
 
@@ -466,13 +569,14 @@ $totalUsers = $DB->query("SELECT COUNT(*) as c FROM users")->fetch()['c'];
 $totalVhosts = $DB->query("SELECT COUNT(*) as c FROM vhosts")->fetch()['c'];
 $todayVisits = $DB->query("SELECT COUNT(*) as c FROM visit_logs WHERE visit_date=CURDATE()")->fetch()['c'];
 $totalOrders = $DB->query("SELECT COUNT(*) as c FROM orders WHERE status=1")->fetch()['c'];
-$pages = ['dashboard','config','servers','vhost_models','vhosts','users','prices','recharge_packages','coupons','tickets','announcement','statistics','about'];
+$pages = ['dashboard','config','servers','vhost_categories','vhost_models','vhosts','users','prices','recharge_packages','coupons','tickets','announcement','statistics','about'];
 if (!in_array($page, $pages)) $page = 'dashboard';
 
 $pageTitles = [
     'dashboard' => ['icon' => 'fa-chart-pie', 'title' => '仪表盘', 'desc' => '系统数据总览'],
     'config' => ['icon' => 'fa-cog', 'title' => '系统配置', 'desc' => '网站参数设置'],
     'servers' => ['icon' => 'fa-server', 'title' => '服务器管理', 'desc' => 'MNBT多服务器配置'],
+    'vhost_categories' => ['icon' => 'fa-tags', 'title' => '分类管理', 'desc' => '三级分类管理'],
     'vhost_models' => ['icon' => 'fa-cube', 'title' => '主机型号', 'desc' => '产品套餐管理'],
     'vhosts' => ['icon' => 'fa-server', 'title' => '虚拟主机', 'desc' => '用户主机列表'],
     'users' => ['icon' => 'fa-users', 'title' => '用户管理', 'desc' => '会员信息管理'],
@@ -750,7 +854,7 @@ $latestUpdate = checkUpdate();
 <div style="flex:1;min-width:260px">
 <h3 style="margin:0 0 8px;font-size:1.1rem;color:#92400e">发现新版本</h3>
 <p style="margin:0 0 12px;color:#78350f;line-height:1.6">
-当前版本 <strong><?php echo h(conf('current_version','1.2.0')); ?></strong>，官方最新版本为 <strong><?php echo h($latestUpdate['version']); ?></strong>。
+当前版本 <strong><?php echo h(conf('current_version','1.3.0')); ?></strong>，官方最新版本为 <strong><?php echo h($latestUpdate['version']); ?></strong>。
 <?php if(!empty($latestUpdate['release_note'])): ?><br><span style="color:#92400e"><?php echo nl2br(h($latestUpdate['release_note'])); ?></span><?php endif; ?>
 </p>
 <a href="<?php echo h($latestUpdate['download_url']); ?>" target="_blank" class="btn btn-primary" style="background:#f59e0b;border-color:#f59e0b"><i class="fas fa-download"></i> 立即下载更新</a>
@@ -823,6 +927,7 @@ $latestUpdate = checkUpdate();
 <a class="tab active" onclick="showTab('tab-mnbt')"><i class="fas fa-server"></i> MNBT对接</a>
 <a class="tab" onclick="showTab('tab-pay')"><i class="fas fa-credit-card"></i> 支付接口</a>
 <a class="tab" onclick="showTab('tab-mail')"><i class="fas fa-envelope"></i> 邮件服务</a>
+<a class="tab" onclick="showTab('tab-oauth')"><i class="fas fa-users-cog"></i> 聚合登录</a>
 <a class="tab" onclick="showTab('tab-site')"><i class="fas fa-cog"></i> 网站设置</a>
 </div>
 
@@ -1003,6 +1108,88 @@ $latestUpdate = checkUpdate();
 </div>
 </div>
 
+<div id="tab-oauth" class="tab-content">
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-users-cog"></i> 彩虹聚合登录配置</h3>
+</div>
+<p style="padding:0 20px;color:var(--gray-500);font-size:.85rem;margin-bottom:12px">
+<i class="fas fa-info-circle"></i> 配置彩虹聚合登录后，用户可通过QQ、微信、支付宝等第三方账号快速登录/注册。<a href="https://login.az0.cn" target="_blank" style="color:var(--primary-solid)">前往申请 →</a>
+</p>
+<div class="form-group">
+<label class="form-label">启用聚合登录</label>
+<select name="oauth_enabled" class="form-control">
+<option value="0" <?php echo conf('oauth_enabled')==='1'?'':'selected'; ?>>关闭</option>
+<option value="1" <?php echo conf('oauth_enabled')==='1'?'selected':''; ?>>开启</option>
+</select>
+<div class="form-tip">开启后将在登录/注册页面显示第三方登录入口</div>
+</div>
+<div class="form-group">
+<label class="form-label">聚合登录接口地址</label>
+<input type="url" name="oauth_api_url" value="<?php echo h(conf('oauth_api_url','https://login.az0.cn/connect.php')); ?>" class="form-control" placeholder="https://login.az0.cn/connect.php">
+<div class="form-tip">彩虹聚合登录API地址，一般无需修改</div>
+</div>
+<div class="form-row">
+<div class="form-group">
+<label class="form-label">AppID</label>
+<input type="text" name="oauth_appid" value="<?php echo h(conf('oauth_appid')); ?>" class="form-control" placeholder="在彩虹聚合登录平台获取">
+</div>
+<div class="form-group">
+<label class="form-label">AppKey</label>
+<input type="text" name="oauth_appkey" value="<?php echo h(conf('oauth_appkey')); ?>" class="form-control" placeholder="在彩虹聚合登录平台获取">
+</div>
+</div>
+<div class="form-group">
+<label class="form-label">启用的登录方式</label>
+<input type="text" name="oauth_types" value="<?php echo h(conf('oauth_types','qq,wx,alipay')); ?>" class="form-control" placeholder="qq,wx,alipay">
+<div class="form-tip">用英文逗号分隔，可选值：qq, wx, alipay, sina, baidu, douyin, huawei, xiaomi, google, microsoft, dingtalk, feishu, gitee, github</div>
+</div>
+<div style="margin-top:16px;padding:16px;background:var(--gray-100);border-radius:12px">
+<h4 style="margin-bottom:12px;font-size:.9rem;color:var(--gray-700)"><i class="fas fa-list"></i> 可选登录方式</h4>
+<div style="display:flex;flex-wrap:wrap;gap:8px;font-size:.85rem">
+<?php
+$allOauthTypes = [
+    'qq'=>'QQ','wx'=>'微信','alipay'=>'支付宝','sina'=>'微博','baidu'=>'百度','douyin'=>'抖音',
+    'huawei'=>'华为','xiaomi'=>'小米','google'=>'谷歌','microsoft'=>'微软','dingtalk'=>'钉钉',
+    'feishu'=>'飞书','gitee'=>'Gitee','github'=>'GitHub'
+];
+foreach ($allOauthTypes as $k => $v) {
+    echo '<span style="padding:4px 10px;border-radius:6px;background:#fff;border:1px solid var(--gray-300)">'.$v.' ('.$k.')</span>';
+}
+?>
+</div>
+</div>
+
+<!-- 自定义图标配置（钉钉、飞书等无内置图标的平台） -->
+<div style="margin-top:16px;padding:16px;background:var(--gray-100);border-radius:12px">
+<h4 style="margin-bottom:12px;font-size:.9rem;color:var(--gray-700)"><i class="fas fa-image"></i> 自定义图标（钉钉、飞书）</h4>
+<p style="font-size:.85rem;color:var(--gray-500);margin-bottom:12px">以下平台无内置图标，可设置图片URL或显示文字（二选一，图片URL优先）。图片建议使用正方形透明背景PNG/SVG。</p>
+<?php
+$customIconTypes = ['dingtalk' => '钉钉', 'feishu' => '飞书'];
+foreach ($customIconTypes as $ck => $cv):
+    $imgVal = h(conf('oauth_icon_img_' . $ck, ''));
+    $textVal = h(conf('oauth_icon_text_' . $ck, ''));
+?>
+<div style="margin-bottom:16px;padding:12px;background:#fff;border-radius:8px;border:1px solid var(--gray-300)">
+<div style="font-weight:600;margin-bottom:8px"><?php echo $cv; ?></div>
+<div class="form-row">
+<div class="form-group">
+<label class="form-label">图片URL</label>
+<input type="text" name="oauth_icon_img_<?php echo $ck; ?>" value="<?php echo $imgVal; ?>" class="form-control" placeholder="https://example.com/dingtalk.png">
+</div>
+<div class="form-group">
+<label class="form-label">显示文字（图片URL为空时生效）</label>
+<input type="text" name="oauth_icon_text_<?php echo $ck; ?>" value="<?php echo $textVal; ?>" class="form-control" placeholder="如：钉">
+</div>
+</div>
+</div>
+<?php endforeach; ?>
+</div>
+
+<button type="submit" class="btn btn-primary" style="margin-top:24px"><i class="fas fa-save"></i> 保存配置</button>
+</div>
+</div>
+
 <div id="tab-site" class="tab-content">
 <div class="card">
 <div class="card-header">
@@ -1015,7 +1202,7 @@ $latestUpdate = checkUpdate();
 <div class="form-row">
 <div class="form-group">
 <label class="form-label">当前版本号</label>
-<input type="text" name="current_version" value="<?php echo h(conf('current_version','1.2.0')); ?>" class="form-control" placeholder="例如：1.2.0">
+<input type="text" name="current_version" value="<?php echo h(conf('current_version','1.3.0')); ?>" class="form-control" placeholder="例如：1.2.0">
 <div class="form-tip">用于与更新服务器比对，检测到新版本时会在后台提示</div>
 </div>
 <div class="form-group">
@@ -1246,61 +1433,341 @@ function closeEditServer(){
 </script>
 <?php endif; ?>
 
-<!-- 主机型号 -->
-<?php if($page==='vhost_models'): ?>
+<!-- 分类管理 -->
+<?php if($page==='vhost_categories'):
+$cats = $DB->query("SELECT * FROM vhost_categories ORDER BY level, sort_order, id")->fetchAll();
+$catTree = [];
+foreach($cats as $c) {
+    $catTree[$c['id']] = $c;
+    $catTree[$c['id']]['children'] = [];
+}
+foreach($cats as $c) {
+    if($c['parent_id'] && isset($catTree[$c['parent_id']])) {
+        $catTree[$c['parent_id']]['children'][] = &$catTree[$c['id']];
+    }
+}
+$level1 = array_filter($catTree, function($c){ return $c['level'] == 1; });
+?>
 <div class="card">
 <div class="card-header">
-<h3 class="card-title"><i class="fas fa-plus-circle"></i> 添加型号</h3>
+<h3 class="card-title"><i class="fas fa-plus-circle"></i> 添加一级分类</h3>
 </div>
 <form method="post" class="form-row">
-<input type="hidden" name="action" value="add_model">
+<input type="hidden" name="action" value="add_category">
+<input type="hidden" name="parent_id" value="">
 <div class="form-group" style="flex:2">
-<label class="form-label">名称</label>
-<input type="text" name="name" required class="form-control" placeholder="如：入门型">
-</div>
-<div class="form-group">
-<label class="form-label">网页空间 (MB)</label>
-<input type="number" name="web_space" required class="form-control">
-</div>
-<div class="form-group">
-<label class="form-label">数据库 (MB)</label>
-<input type="number" name="db_space" required class="form-control">
-</div>
-<div class="form-group">
-<label class="form-label">流量 (GB/月)</label>
-<input type="number" name="flow" value="30" class="form-control">
-</div>
-<div class="form-group">
-<label class="form-label">域名数</label>
-<input type="number" name="domain_limit" value="5" class="form-control">
-</div>
-<div class="form-group">
-<label class="form-label">价格 (积分)</label>
-<input type="number" name="price" required class="form-control">
+<label class="form-label">分类名称</label>
+<input type="text" name="name" required class="form-control" placeholder="如：云服务器">
 </div>
 <div class="form-group">
 <label class="form-label">排序</label>
 <input type="number" name="sort_order" value="0" class="form-control">
-</div>
-<div class="form-group">
-<label class="form-label">MNBT服务器</label>
-<select name="server_id" class="form-control">
-<option value="">默认配置</option>
-<?php try { $srvs=$DB->query("SELECT * FROM mnbt_servers ORDER BY sort_order,id")->fetchAll(); } catch(Exception $e) { $srvs=[]; } foreach($srvs as $srv): ?>
-<option value="<?php echo $srv['id']; ?>"><?php echo h($srv['name']); ?></option>
-<?php endforeach; ?>
-</select>
-</div>
-<div class="form-group">
-<label class="form-label">每人限量</label>
-<input type="number" name="max_per_user" value="0" min="0" class="form-control" placeholder="0=不限">
-<div class="form-tip">0 表示不限购，大于 0 则限制每用户购买该型号的最大数量</div>
 </div>
 <div style="display:flex;align-items:flex-end">
 <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> 添加</button>
 </div>
 </form>
 </div>
+
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-list"></i> 分类列表</h3>
+</div>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>名称</th><th>级别</th><th>排序</th><th>编辑</th><th>操作</th></tr>
+</thead>
+<tbody>
+<?php
+function renderCatRow($cat, $depth = 0) {
+    $indent = str_repeat('&nbsp;&nbsp;&nbsp;&nbsp;', $depth);
+    $prefix = $depth > 0 ? '↳ ' : '';
+    $levelLabels = [1=>'一级',2=>'二级',3=>'三级'];
+    ?>
+    <tr id="cat-row-<?php echo $cat['id']; ?>">
+    <td><strong><?php echo $indent.$prefix.h($cat['name']); ?></strong></td>
+    <td><span class="badge badge-info"><?php echo $levelLabels[$cat['level']] ?? $cat['level']; ?></span></td>
+    <td><?php echo $cat['sort_order']; ?></td>
+    <td style="max-width:300px">
+    <form method="post" class="form-row" style="margin:0;gap:6px">
+    <input type="hidden" name="action" value="edit_category">
+    <input type="hidden" name="id" value="<?php echo $cat['id']; ?>">
+    <input type="text" name="name" value="<?php echo h($cat['name']); ?>" class="form-control" style="flex:1;padding:6px 10px;font-size:.85rem">
+    <input type="number" name="sort_order" value="<?php echo $cat['sort_order']; ?>" class="form-control" style="width:60px;padding:6px 8px;font-size:.85rem">
+    <button type="submit" class="btn btn-sm btn-primary" style="padding:4px 8px"><i class="fas fa-save"></i></button>
+    </form>
+    </td>
+    <td style="white-space:nowrap">
+    <?php if($cat['level'] < 3): ?>
+    <button type="button" class="btn btn-sm btn-outline" onclick="showAddChild(<?php echo $cat['id']; ?>,'<?php echo h(addslashes($cat['name'])); ?>',<?php echo $cat['level']+1; ?>)"><i class="fas fa-plus"></i> 子分类</button>
+    <?php endif; ?>
+    <form method="post" style="display:inline" onsubmit="return confirm('确定删除此分类？')">
+    <input type="hidden" name="action" value="del_category">
+    <input type="hidden" name="id" value="<?php echo $cat['id']; ?>">
+    <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+    </form>
+    </td>
+    </tr>
+    <?php
+    if(!empty($cat['children'])) {
+        foreach($cat['children'] as $child) {
+            renderCatRow($child, $depth + 1);
+        }
+    }
+}
+foreach($level1 as $c) {
+    renderCatRow($c);
+}
+if(empty($level1)): ?>
+<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--gray-500)">
+<i class="fas fa-inbox" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>
+暂无分类数据，请在上方添加一级分类
+</td></tr>
+<?php endif; ?>
+</tbody>
+</table>
+</div>
+</div>
+
+<!-- 添加子分类弹窗 -->
+<div id="addChildOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9999;backdrop-filter:blur(4px)" onclick="closeAddChild()"></div>
+<div id="addChildModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10000;width:450px;max-width:92vw;background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200)">
+<h3 style="margin:0;font-size:1.15rem"><i class="fas fa-plus-circle" style="color:var(--primary-solid);margin-right:8px"></i>添加子分类</h3>
+<button type="button" onclick="closeAddChild()" style="background:none;border:none;font-size:1.6rem;cursor:pointer;color:var(--gray-500);line-height:1">&times;</button>
+</div>
+<form method="post" style="padding:20px 24px">
+<input type="hidden" name="action" value="add_category">
+<input type="hidden" name="parent_id" id="addChildParentId">
+<div class="form-group" style="margin-bottom:16px">
+<label class="form-label">父级分类</label>
+<input type="text" id="addChildParentName" class="form-control" readonly style="background:var(--gray-100)">
+</div>
+<div class="form-group" style="margin-bottom:16px">
+<label class="form-label">分类名称</label>
+<input type="text" name="name" required class="form-control" placeholder="请输入子分类名称">
+</div>
+<div class="form-group" style="margin-bottom:16px">
+<label class="form-label">排序</label>
+<input type="number" name="sort_order" value="0" class="form-control">
+</div>
+<div style="display:flex;gap:10px;justify-content:flex-end">
+<button type="button" class="btn btn-outline" onclick="closeAddChild()">取消</button>
+<button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> 添加</button>
+</div>
+</form>
+</div>
+<script>
+function showAddChild(id, name, level) {
+    document.getElementById('addChildParentId').value = id;
+    document.getElementById('addChildParentName').value = name + ' (当前' + (level===2?'二级':'三级') + '分类)';
+    document.getElementById('addChildOverlay').style.display = 'block';
+    document.getElementById('addChildModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+function closeAddChild() {
+    document.getElementById('addChildOverlay').style.display = 'none';
+    document.getElementById('addChildModal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+</script>
+<?php endif; ?>
+
+<!-- 主机型号 -->
+<?php if($page==='vhost_models'):
+// 编辑模式：加载已有型号数据
+$editingModel = null;
+if (isset($_GET['edit_model'])) {
+    $editModelId = intval($_GET['edit_model']);
+    $stmtEm = $DB->prepare("SELECT * FROM vhost_models WHERE id=?");
+    $stmtEm->execute([$editModelId]);
+    $editingModel = $stmtEm->fetch();
+    // 加载时长折扣
+    $editingDurations = [];
+    if ($editingModel) {
+        $stmtDur = $DB->prepare("SELECT * FROM vhost_model_durations WHERE model_id=?");
+        $stmtDur->execute([$editModelId]);
+        $editingDurations = [];
+        foreach($stmtDur->fetchAll() as $d) {
+            $editingDurations[$d['duration_type']] = $d;
+        }
+        // 加载弹性配置
+        $stmtElastic = $DB->prepare("SELECT * FROM vhost_model_elastic WHERE model_id=?");
+        $stmtElastic->execute([$editModelId]);
+        $editingElastic = [];
+        foreach($stmtElastic->fetchAll() as $el) {
+            $editingElastic[$el['field_name']] = $el;
+        }
+    }
+}
+?>
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas <?php echo $editingModel?'fa-edit':'fa-plus-circle'; ?>"></i> <?php echo $editingModel?'编辑型号':'添加型号'; ?></h3>
+<?php if ($editingModel): ?>
+<a href="?page=vhost_models" class="btn btn-sm btn-outline"><i class="fas fa-times"></i> 取消编辑</a>
+<?php endif; ?>
+</div>
+<form method="post" class="form-row">
+<input type="hidden" name="action" value="<?php echo $editingModel?'edit_model':'add_model'; ?>">
+<?php if ($editingModel): ?><input type="hidden" name="id" value="<?php echo $editingModel['id']; ?>"><?php endif; ?>
+<?php
+// 构建三级分类树用于下拉
+$allCats = $DB->query("SELECT * FROM vhost_categories ORDER BY level, sort_order, id")->fetchAll();
+$catMap = [];
+foreach($allCats as $c) { $catMap[$c['id']] = $c; }
+function buildCatOptions($cats, $map, $selectedId, $depth = 0) {
+    $html = '';
+    foreach($cats as $c) {
+        $indent = str_repeat('&nbsp;&nbsp;&nbsp;', $depth);
+        $prefix = $depth > 0 ? '↳ ' : '';
+        $sel = ($c['id'] == $selectedId) ? ' selected' : '';
+        $html .= '<option value="'.$c['id'].'"'.$sel.'>'.$indent.$prefix.h($c['name']).'</option>';
+        $children = array_filter($map, function($x) use ($c) { return $x['parent_id'] == $c['id']; });
+        if(!empty($children)) {
+            $html .= buildCatOptions($children, $map, $selectedId, $depth + 1);
+        }
+    }
+    return $html;
+}
+$level1cats = array_filter($catMap, function($c){ return $c['level'] == 1; });
+$editingCatId = $editingModel ? ($editingModel['category_id'] ?? 0) : 0;
+$catOptions = buildCatOptions($level1cats, $catMap, $editingCatId);
+?>
+<div class="form-group">
+<label class="form-label">分类</label>
+<select name="category_id" class="form-control">
+<option value="">未分类</option>
+<?php echo $catOptions; ?>
+</select>
+</div>
+<div class="form-group" style="flex:2">
+<label class="form-label">名称</label>
+<input type="text" name="name" required class="form-control" placeholder="如：入门型" value="<?php echo $editingModel ? h($editingModel['name']) : ''; ?>">
+</div>
+<div class="form-group">
+<label class="form-label">网页空间 (MB)</label>
+<input type="number" name="web_space" required class="form-control" value="<?php echo $editingModel ? $editingModel['web_space'] : ''; ?>">
+</div>
+<div class="form-group">
+<label class="form-label">数据库 (MB)</label>
+<input type="number" name="db_space" required class="form-control" value="<?php echo $editingModel ? $editingModel['db_space'] : ''; ?>">
+</div>
+<div class="form-group">
+<label class="form-label">流量 (GB/月)</label>
+<input type="number" name="flow" value="<?php echo $editingModel ? $editingModel['flow'] : '30'; ?>" class="form-control">
+</div>
+<div class="form-group">
+<label class="form-label">域名数</label>
+<input type="number" name="domain_limit" value="<?php echo $editingModel ? $editingModel['domain_limit'] : '5'; ?>" class="form-control">
+</div>
+<div class="form-group">
+<label class="form-label">价格 (积分)</label>
+<input type="number" name="price" required class="form-control" value="<?php echo $editingModel ? $editingModel['price'] : ''; ?>">
+</div>
+<div class="form-group">
+<label class="form-label">排序</label>
+<input type="number" name="sort_order" value="<?php echo $editingModel ? $editingModel['sort_order'] : '0'; ?>" class="form-control">
+</div>
+<div class="form-group">
+<label class="form-label">MNBT服务器</label>
+<select name="server_id" class="form-control">
+<option value="">默认配置</option>
+<?php try { $srvs=$DB->query("SELECT * FROM mnbt_servers ORDER BY sort_order,id")->fetchAll(); } catch(Exception $e) { $srvs=[]; } foreach($srvs as $srv): ?>
+<option value="<?php echo $srv['id']; ?>" <?php echo $editingModel && $editingModel['server_id']==$srv['id']?'selected':''; ?>><?php echo h($srv['name']); ?></option>
+<?php endforeach; ?>
+</select>
+</div>
+<div class="form-group">
+<label class="form-label">每人限量</label>
+<input type="number" name="max_per_user" value="<?php echo $editingModel ? $editingModel['max_per_user'] : '0'; ?>" min="0" class="form-control" placeholder="0=不限">
+<div class="form-tip">0 表示不限购，大于 0 则限制每用户购买该型号的最大数量</div>
+</div>
+
+<div class="form-group" style="grid-column:1/-1;display:flex;align-items:flex-end;margin-top:8px">
+<button type="submit" class="btn btn-primary"><i class="fas <?php echo $editingModel?'fa-save':'fa-plus'; ?>"></i> <?php echo $editingModel?'保存修改':'添加型号'; ?></button>
+</div>
+
+<!-- 时长折扣 -->
+<div class="card" style="grid-column:1/-1">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-clock"></i> 时长折扣</h3>
+</div>
+<div style="padding:0 24px 24px">
+<?php
+$durationKeys = ['month','quarter','half_year','year','2year','3year','5year','10year'];
+$durationLabels = ['month'=>'月付','quarter'=>'季付','half_year'=>'半年付','year'=>'年付','2year'=>'两年付','3year'=>'三年付','5year'=>'五年付','10year'=>'十年付'];
+?>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>时长</th><th>启用</th><th>折扣 (%)</th></tr>
+</thead>
+<tbody>
+<?php foreach($durationKeys as $dk): ?>
+<tr>
+<td><strong><?php echo $durationLabels[$dk]; ?></strong></td>
+<td><input type="checkbox" name="dur[<?php echo $dk; ?>][enabled]" value="1" <?php echo isset($editingDurations[$dk]) && $editingDurations[$dk]['enabled'] ? 'checked' : ''; ?>></td>
+<td><input type="number" name="dur[<?php echo $dk; ?>][discount]" value="<?php echo isset($editingDurations[$dk]) ? $editingDurations[$dk]['discount'] : '0'; ?>" min="0" max="100" class="form-control" style="width:100px;display:inline-block"></td>
+</tr>
+<?php endforeach; ?>
+</tbody>
+</table>
+</div>
+<div style="display:flex;align-items:flex-end;margin-top:16px">
+<button type="submit" class="btn btn-primary"><i class="fas <?php echo $editingModel?'fa-save':'fa-plus'; ?>"></i> <?php echo $editingModel?'保存修改':'添加'; ?></button>
+</div>
+</div>
+</div>
+
+<!-- 弹性配置 -->
+<div class="card" style="grid-column:1/-1">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-expand-arrows-alt"></i> 弹性配置</h3>
+</div>
+<div style="padding:0 24px 24px">
+<div class="form-group">
+<label class="form-label">
+<input type="checkbox" name="is_elastic" value="1" <?php echo $editingModel && $editingModel['is_elastic'] ? 'checked' : ''; ?> onchange="toggleElasticFields(this)">
+启用弹性配置
+</label>
+</div>
+<?php
+$elasticFields = ['web_space'=>'网页空间 (MB)','db_space'=>'数据库 (MB)','flow'=>'流量 (GB)','domain_limit'=>'域名数'];
+?>
+<div class="table-wrapper" id="elasticFieldsContainer" style="<?php echo $editingModel && $editingModel['is_elastic'] ? '' : 'display:none'; ?>">
+<table>
+<thead>
+<tr><th>资源</th><th>启用</th><th>最小值</th><th>最大值</th><th>步进</th><th>单价 (积分/步)</th></tr>
+</thead>
+<tbody>
+<?php foreach($elasticFields as $ek => $el): ?>
+<tr>
+<td><strong><?php echo $el; ?></strong></td>
+<td><input type="checkbox" name="elastic[<?php echo $ek; ?>][enabled]" value="1" <?php echo isset($editingElastic[$ek]) && $editingElastic[$ek]['enabled'] ? 'checked' : ''; ?>></td>
+<td><input type="number" name="elastic[<?php echo $ek; ?>][min]" value="<?php echo isset($editingElastic[$ek]) ? $editingElastic[$ek]['min_value'] : 0; ?>" class="form-control" style="width:80px;display:inline-block"></td>
+<td><input type="number" name="elastic[<?php echo $ek; ?>][max]" value="<?php echo isset($editingElastic[$ek]) ? $editingElastic[$ek]['max_value'] : 0; ?>" class="form-control" style="width:80px;display:inline-block"></td>
+<td><input type="number" name="elastic[<?php echo $ek; ?>][step]" value="<?php echo isset($editingElastic[$ek]) ? $editingElastic[$ek]['step'] : 1; ?>" class="form-control" style="width:80px;display:inline-block"></td>
+<td><input type="number" name="elastic[<?php echo $ek; ?>][price]" value="<?php echo isset($editingElastic[$ek]) ? $editingElastic[$ek]['unit_price'] : 0; ?>" class="form-control" style="width:100px;display:inline-block"></td>
+</tr>
+<?php endforeach; ?>
+</tbody>
+</table>
+</div>
+<div style="display:flex;align-items:flex-end;margin-top:16px">
+<button type="submit" class="btn btn-primary"><i class="fas <?php echo $editingModel?'fa-save':'fa-plus'; ?>"></i> <?php echo $editingModel?'保存修改':'添加'; ?></button>
+</div>
+</div>
+</div>
+</form>
+</div>
+
+<script>
+function toggleElasticFields(el) {
+    document.getElementById('elasticFieldsContainer').style.display = el.checked ? '' : 'none';
+}
+</script>
 
 <div class="card">
 <div class="card-header">
@@ -1350,6 +1817,7 @@ if ($maxPerUser > 0) {
 <?php endif; ?>
 </td>
 <td>
+<a href="?page=vhost_models&edit_model=<?php echo $m['id']; ?>" class="btn btn-sm btn-primary"><i class="fas fa-edit"></i> 编辑</a>
 <form method="post" style="display:inline">
 <input type="hidden" name="action" value="toggle_model">
 <input type="hidden" name="id" value="<?php echo $m['id']; ?>">
@@ -1866,20 +2334,27 @@ if ($tkFilter === 'pending') $tkWhere = 'WHERE t.status=0';
 elseif ($tkFilter === 'replied') $tkWhere = 'WHERE t.status=1';
 elseif ($tkFilter === 'closed') $tkWhere = 'WHERE t.status=2';
 
-$tkList = $DB->query("SELECT t.*, u.email as user_email, u.nickname as user_nickname, vm.name as model_name, vh.account as vhost_account FROM tickets t LEFT JOIN users u ON t.user_id=u.id LEFT JOIN vhosts vh ON t.vhost_id=vh.id LEFT JOIN vhost_models vm ON vh.model_id=vm.id {$tkWhere} ORDER BY t.updated_at DESC")->fetchAll();
-$tkPending = $DB->query("SELECT COUNT(*) as c FROM tickets WHERE status=0")->fetch()['c'];
+try {
+    $tkList = $DB->query("SELECT t.*, u.email as user_email, u.nickname as user_nickname, vm.name as model_name, vh.account as vhost_account FROM tickets t LEFT JOIN users u ON t.user_id=u.id LEFT JOIN vhosts vh ON t.vhost_id=vh.id LEFT JOIN vhost_models vm ON vh.model_id=vm.id {$tkWhere} ORDER BY t.updated_at DESC")->fetchAll();
+} catch (Exception $e) { $tkList = []; }
+$tkPending = $DB->query("SELECT COUNT(*) as c FROM tickets WHERE status=0")->fetch()['c'] ?? 0;
 $tkStatusMap = [0=>'待处理',1=>'已回复',2=>'已关闭'];
 $tkStatusBadge = [0=>'badge-warning',1=>'badge-success',2=>'badge-gray'];
 
 $viewTicket = isset($_GET['view']) ? intval($_GET['view']) : 0;
 if ($viewTicket > 0):
-    $stmt = $DB->prepare("SELECT t.*, u.email as user_email, u.nickname as user_nickname, vm.name as model_name, vh.account as vhost_account FROM tickets t LEFT JOIN users u ON t.user_id=u.id LEFT JOIN vhosts vh ON t.vhost_id=vh.id LEFT JOIN vhost_models vm ON vh.model_id=vm.id WHERE t.id=?");
-    $stmt->execute([$viewTicket]);
-    $vd = $stmt->fetch();
+    try {
+        $stmt = $DB->prepare("SELECT t.*, u.email as user_email, u.nickname as user_nickname, vm.name as model_name, vh.account as vhost_account FROM tickets t LEFT JOIN users u ON t.user_id=u.id LEFT JOIN vhosts vh ON t.vhost_id=vh.id LEFT JOIN vhost_models vm ON vh.model_id=vm.id WHERE t.id=?");
+        $stmt->execute([$viewTicket]);
+        $vd = $stmt->fetch();
+    } catch (Exception $e) { $vd = false; }
     if ($vd):
-        $vdReplies = $DB->prepare("SELECT tr.*, u.nickname as user_nickname, a.username as admin_username FROM ticket_replies tr LEFT JOIN users u ON tr.user_id=u.id LEFT JOIN admins a ON tr.admin_id=a.id WHERE tr.ticket_id=? ORDER BY tr.created_at ASC");
-        $vdReplies->execute([$viewTicket]);
-        $vdReplyList = $vdReplies->fetchAll();
+        try {
+            $vdReplies = $DB->prepare("SELECT tr.*, u.nickname as user_nickname, a.username as admin_username FROM ticket_replies tr LEFT JOIN users u ON tr.user_id=u.id LEFT JOIN admins a ON tr.admin_id=a.id WHERE tr.ticket_id=? ORDER BY tr.created_at ASC");
+            $vdReplies->execute([$viewTicket]);
+            $vdReplyList = $vdReplies->fetchAll();
+        } catch (Exception $e) { $vdReplyList = []; }
+        $vdStatus = isset($vd['status']) ? intval($vd['status']) : 0;
 ?>
 <div class="card">
 <div class="card-header">
@@ -1888,9 +2363,9 @@ if ($viewTicket > 0):
 </div>
 <div style="padding:16px 0">
 <div style="margin-bottom:16px">
-<span class="badge badge-lg <?php echo $tkStatusBadge[$vd['status']]; ?>"><?php echo $tkStatusMap[$vd['status']]; ?></span>
+<span class="badge badge-lg <?php echo $tkStatusBadge[$vdStatus]; ?>"><?php echo $tkStatusMap[$vdStatus]; ?></span>
 </div>
-<div style="margin-bottom:8px"><strong>标题：</strong><?php echo h($vd['subject']); ?></div>
+<div style="margin-bottom:8px"><strong>标题：</strong><?php echo h($vd['subject'] ?? '(无标题)'); ?></div>
 <div style="margin-bottom:8px;font-size:.9rem;color:var(--gray-500)">
 <strong>提交人：</strong><?php echo h($vd['user_nickname'] ?: $vd['user_email']); ?> &nbsp;|&nbsp;
 <strong>时间：</strong><?php echo $vd['created_at']; ?>
@@ -1910,7 +2385,7 @@ if ($viewTicket > 0):
 </div>
 <?php endforeach; ?>
 </div>
-<?php if ($vd['status'] != 2): ?>
+<?php if ($vdStatus != 2): ?>
 <div style="border-top:1px solid var(--border-color);padding-top:16px;margin-top:8px">
 <form method="post">
 <input type="hidden" name="action" value="admin_reply_ticket">
@@ -2384,17 +2859,17 @@ if ($checking) {
 <?php if($checking): ?>
 <div class="alert <?php echo $latestInfo ? 'alert-warning' : 'alert-success'; ?>" style="margin-top:24px;text-align:left">
 <?php if($latestInfo): ?>
-<i class="fas fa-bell"></i> 发现新版本 <strong><?php echo h($latestInfo['version']); ?></strong>，当前版本 <strong><?php echo h(conf('current_version','1.2.0')); ?></strong>。
+<i class="fas fa-bell"></i> 发现新版本 <strong><?php echo h($latestInfo['version']); ?></strong>，当前版本 <strong><?php echo h(conf('current_version','1.3.0')); ?></strong>。
 <?php if(!empty($latestInfo['release_note'])): ?><br><span style="opacity:.9"><?php echo nl2br(h($latestInfo['release_note'])); ?></span><?php endif; ?>
 <br><a href="<?php echo h($latestInfo['download_url']); ?>" target="_blank" class="btn btn-primary" style="margin-top:12px;background:#f59e0b;border-color:#f59e0b"><i class="fas fa-download"></i> 立即下载</a>
 <?php else: ?>
-<i class="fas fa-check-circle"></i> 当前已是最新版本 <strong><?php echo h(conf('current_version','1.2.0')); ?></strong>。
+<i class="fas fa-check-circle"></i> 当前已是最新版本 <strong><?php echo h(conf('current_version','1.3.0')); ?></strong>。
 <?php endif; ?>
 </div>
 <?php endif; ?>
 
 <div style="margin-top:30px;padding-top:20px;border-top:1px solid var(--gray-200);color:var(--gray-500);font-size:.85rem">
-<p style="margin:4px 0">当前版本：<?php echo h(conf('current_version','1.2.0')); ?></p>
+<p style="margin:4px 0">当前版本：<?php echo h(conf('current_version','1.3.0')); ?></p>
 <p style="margin:4px 0">更新接口：<?php echo h(conf('update_api_url','https://staridc.fangqihang.cn/api.php')); ?></p>
 </div>
 </div>

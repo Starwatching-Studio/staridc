@@ -218,6 +218,23 @@ if ($authorized) {
             $logs[] = "✅ 已创建表：tickets";
         } else {
             $logs[] = "⏭️ 表已存在：tickets";
+            // 补充旧版可能缺失的列
+            $missingCols = [
+                'vhost_id' => 'INT NULL AFTER user_id',
+                'subject'  => 'VARCHAR(200) NOT NULL DEFAULT "" AFTER vhost_id',
+                'status'   => 'TINYINT NOT NULL DEFAULT 0 AFTER subject',
+            ];
+            foreach ($missingCols as $col => $def) {
+                try {
+                    $cols = $pdo->query("SHOW COLUMNS FROM tickets LIKE '{$col}'")->fetchAll();
+                    if (empty($cols)) {
+                        $pdo->exec("ALTER TABLE tickets ADD COLUMN {$col} {$def}");
+                        $logs[] = "✅ 已添加列：tickets.{$col}";
+                    }
+                } catch (Exception $e) {
+                    $logs[] = "⚠️ 添加 tickets.{$col} 失败：" . $e->getMessage();
+                }
+            }
         }
 
         if (!in_array('ticket_replies', $tables)) {
@@ -233,6 +250,21 @@ if ($authorized) {
             $logs[] = "✅ 已创建表：ticket_replies";
         } else {
             $logs[] = "⏭️ 表已存在：ticket_replies";
+            // 补充旧版可能缺失的列
+            $replyMissingCols = [
+                'admin_id' => 'INT NULL AFTER user_id',
+            ];
+            foreach ($replyMissingCols as $col => $def) {
+                try {
+                    $cols = $pdo->query("SHOW COLUMNS FROM ticket_replies LIKE '{$col}'")->fetchAll();
+                    if (empty($cols)) {
+                        $pdo->exec("ALTER TABLE ticket_replies ADD COLUMN {$col} {$def}");
+                        $logs[] = "✅ 已添加列：ticket_replies.{$col}";
+                    }
+                } catch (Exception $e) {
+                    $logs[] = "⚠️ 添加 ticket_replies.{$col} 失败：" . $e->getMessage();
+                }
+            }
         }
 
         // === 9. 补充工单通知配置项 ===
@@ -251,16 +283,17 @@ if ($authorized) {
 
         // === 10. 补充版本更新配置项 ===
         $updateConfigs = [
-            'current_version' => '1.2.0',
+            'current_version' => '1.3.0',
             'update_api_url' => 'https://staridc.fangqihang.cn/api.php',
         ];
-        $insertUpdateStmt = $pdo->prepare("INSERT IGNORE INTO config(k,v) VALUES(?,?)");
+        $upsertStmt = $pdo->prepare("INSERT INTO config(k,v) VALUES(?,?) ON DUPLICATE KEY UPDATE v=VALUES(v)");
         foreach ($updateConfigs as $key => $val) {
             if (!in_array($key, $configKeys)) {
-                $insertUpdateStmt->execute([$key, $val]);
+                $upsertStmt->execute([$key, $val]);
                 $logs[] = "✅ 已添加配置项：{$key}";
             } else {
-                $logs[] = "⏭️ 配置项已存在：{$key}";
+                $upsertStmt->execute([$key, $val]);
+                $logs[] = "✅ 已更新配置项：{$key}";
             }
         }
 
@@ -300,6 +333,151 @@ if ($authorized) {
             } else {
                 $logs[] = "⏭️ 配置项已存在：{$key}";
             }
+        }
+
+        // === 14. 创建OAuth聚合登录绑定表 ===
+        if (!in_array('oauth_bindings', $tables)) {
+            $pdo->exec("CREATE TABLE oauth_bindings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                oauth_type VARCHAR(20) NOT NULL,
+                social_uid VARCHAR(100) NOT NULL,
+                nickname VARCHAR(100) NULL,
+                faceimg VARCHAR(500) NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_type_uid (oauth_type, social_uid),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $logs[] = "✅ 已创建表：oauth_bindings";
+        } else {
+            $logs[] = "⏭️ 表已存在：oauth_bindings";
+        }
+
+        // === 15. 补充聚合登录配置项 ===
+        $oauthConfigs = [
+            'oauth_enabled' => '0',
+            'oauth_api_url' => 'https://login.az0.cn/connect.php',
+            'oauth_appid' => '',
+            'oauth_appkey' => '',
+            'oauth_types' => 'qq,wx,alipay',
+            'oauth_icon_img_dingtalk' => '',
+            'oauth_icon_text_dingtalk' => '钉',
+            'oauth_icon_img_feishu' => '',
+            'oauth_icon_text_feishu' => '飞',
+        ];
+        $insertOauthStmt = $pdo->prepare("INSERT IGNORE INTO config(k,v) VALUES(?,?)");
+        foreach ($oauthConfigs as $key => $val) {
+            if (!in_array($key, $configKeys)) {
+                $insertOauthStmt->execute([$key, $val]);
+                $logs[] = "✅ 已添加配置项：{$key}";
+            } else {
+                $logs[] = "⏭️ 配置项已存在：{$key}";
+            }
+        }
+
+        // === 16. vhost_models 添加 category_id, is_elastic 字段 ===
+        $modelNewCols = [
+            'category_id' => 'INT NULL AFTER max_per_user',
+            'is_elastic'  => 'TINYINT NOT NULL DEFAULT 0 AFTER category_id',
+        ];
+        $modelCols = array_column($pdo->query("SHOW COLUMNS FROM vhost_models")->fetchAll(), 'Field');
+        foreach ($modelNewCols as $col => $def) {
+            if (!in_array($col, $modelCols)) {
+                $pdo->exec("ALTER TABLE vhost_models ADD COLUMN {$col} {$def}");
+                $logs[] = "✅ vhost_models 已添加字段：{$col}";
+            } else {
+                $logs[] = "⏭️ vhost_models 字段已存在：{$col}";
+            }
+        }
+
+        // === 17. 创建三级分类表 ===
+        if (!in_array('vhost_categories', $tables)) {
+            $pdo->exec("CREATE TABLE vhost_categories (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(50) NOT NULL,
+                parent_id INT NULL,
+                level TINYINT NOT NULL DEFAULT 1,
+                sort_order INT NOT NULL DEFAULT 0,
+                FOREIGN KEY (parent_id) REFERENCES vhost_categories(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $logs[] = "✅ 已创建表：vhost_categories";
+            $pdo->exec("INSERT INTO vhost_categories(name,parent_id,level,sort_order) VALUES('未分类',NULL,1,0)");
+            $catId1 = $pdo->lastInsertId();
+            $pdo->exec("INSERT INTO vhost_categories(name,parent_id,level,sort_order) VALUES('未分类',{$catId1},2,0)");
+            $catId2 = $pdo->lastInsertId();
+            $pdo->exec("INSERT INTO vhost_categories(name,parent_id,level,sort_order) VALUES('未分类',{$catId2},3,0)");
+            $catId3 = $pdo->lastInsertId();
+            $pdo->exec("UPDATE vhost_models SET category_id={$catId3} WHERE category_id IS NULL");
+            $logs[] = "✅ 已添加默认分类，旧型号已归入";
+        } else {
+            $logs[] = "⏭️ 表已存在：vhost_categories";
+            // 补充 level 列（旧版可能没有）
+            try {
+                $cols = $pdo->query("SHOW COLUMNS FROM vhost_categories LIKE 'level'")->fetchAll();
+                if (empty($cols)) {
+                    $pdo->exec("ALTER TABLE vhost_categories ADD COLUMN level TINYINT NOT NULL DEFAULT 1 AFTER parent_id");
+                    $logs[] = "✅ 已添加列：vhost_categories.level";
+                    // 自动计算level
+                    $allCats = $pdo->query("SELECT id, parent_id FROM vhost_categories")->fetchAll();
+                    foreach ($allCats as $c) {
+                        if (empty($c['parent_id'])) {
+                            $pdo->exec("UPDATE vhost_categories SET level=1 WHERE id={$c['id']}");
+                        }
+                    }
+                    foreach ($allCats as $c) {
+                        if (!empty($c['parent_id'])) {
+                            $pStmt = $pdo->prepare("SELECT level FROM vhost_categories WHERE id=?");
+                            $pStmt->execute([$c['parent_id']]);
+                            $p = $pStmt->fetch();
+                            if ($p) {
+                                $pdo->exec("UPDATE vhost_categories SET level=".($p['level']+1)." WHERE id={$c['id']}");
+                            }
+                        }
+                    }
+                }
+            } catch (Exception $e) {
+                $logs[] = "⚠️ 添加 vhost_categories.level 失败：" . $e->getMessage();
+            }
+        }
+
+        // === 18. 创建时长折扣表 ===
+        if (!in_array('vhost_model_durations', $tables)) {
+            $pdo->exec("CREATE TABLE vhost_model_durations (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                model_id INT NOT NULL,
+                duration_type VARCHAR(20) NOT NULL,
+                discount INT NOT NULL DEFAULT 0,
+                enabled TINYINT NOT NULL DEFAULT 0,
+                FOREIGN KEY (model_id) REFERENCES vhost_models(id) ON DELETE CASCADE,
+                UNIQUE KEY uk_model_dur (model_id, duration_type)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $logs[] = "✅ 已创建表：vhost_model_durations";
+            $models = $pdo->query("SELECT id FROM vhost_models")->fetchAll();
+            $durStmt = $pdo->prepare("INSERT IGNORE INTO vhost_model_durations(model_id,duration_type,discount,enabled) VALUES(?,'month',0,1)");
+            foreach ($models as $m) { $durStmt->execute([$m['id']]); }
+            $logs[] = "✅ 旧型号已设置默认月付";
+        } else {
+            $logs[] = "⏭️ 表已存在：vhost_model_durations";
+        }
+
+        // === 19. 创建弹性配置表 ===
+        if (!in_array('vhost_model_elastic', $tables)) {
+            $pdo->exec("CREATE TABLE vhost_model_elastic (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                model_id INT NOT NULL,
+                field_name VARCHAR(20) NOT NULL,
+                min_value INT NOT NULL,
+                max_value INT NOT NULL,
+                step INT NOT NULL DEFAULT 1,
+                unit_price INT NOT NULL DEFAULT 0,
+                enabled TINYINT NOT NULL DEFAULT 0,
+                FOREIGN KEY (model_id) REFERENCES vhost_models(id) ON DELETE CASCADE,
+                UNIQUE KEY uk_model_field (model_id, field_name)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $logs[] = "✅ 已创建表：vhost_model_elastic";
+        } else {
+            $logs[] = "⏭️ 表已存在：vhost_model_elastic";
         }
 
         $success = '数据库升级完成！共执行 ' . count($logs) . ' 项操作。';

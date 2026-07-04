@@ -10,6 +10,7 @@ $mailEnabled = conf('mail_enabled') === '1';
 $domainRestrict = conf('email_domain_restrict_enabled') === '1';
 $domainWhitelist = trim(conf('email_domain_whitelist', ''));
 $inviteCode = trim($_GET['invite'] ?? $_SESSION['invite_code'] ?? '');
+$oauthError = trim($_GET['oauth_error'] ?? '');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
@@ -196,7 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-renderHeader('登录 / 注册');
+renderHeader('登录 / 注册', '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">');
 ?>
 <div class="auth-container">
     <div class="auth-card">
@@ -210,6 +211,9 @@ renderHeader('登录 / 注册');
         <?php endif; ?>
         <?php if ($success): ?>
         <div class="msg msg-success"><?php echo h($success); ?></div>
+        <?php endif; ?>
+        <?php if ($oauthError): ?>
+        <div class="msg msg-error"><?php echo h($oauthError); ?></div>
         <?php endif; ?>
 
         <?php if ($mode === 'login'): ?>
@@ -295,6 +299,35 @@ renderHeader('登录 / 注册');
         </form>
         <p class="auth-switch">已有账号？<a href="?mode=login">去登录</a></p>
         <?php endif; ?>
+
+        <?php
+        // 第三方聚合登录
+        $oauthEnabled = conf('oauth_enabled') === '1';
+        if ($oauthEnabled) {
+            require_once ROOT . 'oauth.php';
+            $enabledTypes = getEnabledOauthTypes();
+            if (!empty($enabledTypes)):
+        ?>
+        <div class="oauth-login" style="margin-top:24px;padding-top:20px;border-top:1px solid #eee">
+            <p style="text-align:center;color:#888;font-size:.85rem;margin-bottom:14px">使用第三方账号登录</p>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center">
+                <?php foreach ($enabledTypes as $typeKey => $typeInfo): 
+                    $bgStyle = oauthNeedBackground($typeKey, $typeInfo) ? 'background:' . h($typeInfo['color']) . ';color:#fff;' : 'background:none;color:#333;';
+                ?>
+                <a href="oauth.php?act=login&type=<?php echo h($typeKey); ?>"
+                   style="display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;<?php echo $bgStyle; ?>text-decoration:none;transition:all .2s;box-shadow:0 2px 8px rgba(0,0,0,0.15)"
+                   onmouseover="this.style.transform='scale(1.1)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.2)'"
+                   onmouseout="this.style.transform='';this.style.boxShadow='0 2px 8px rgba(0,0,0,0.15)'"
+                   title="<?php echo h($typeInfo['name']); ?>">
+                    <?php echo renderOauthIconByKey($typeKey, $typeInfo); ?>
+                </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php
+            endif;
+        }
+        ?>
     </div>
 </div>
 

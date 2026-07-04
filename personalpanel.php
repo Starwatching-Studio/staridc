@@ -9,6 +9,18 @@ requireLogin();
 $user = getUser();
 $error = '';
 $success = '';
+if (isset($_GET['msg'])) {
+    $msgType = $_GET['msg'] ?? '';
+    if ($msgType === 'ticket_created') $success = '工单创建成功';
+    elseif ($msgType === 'ticket_replied') $success = '回复成功';
+    elseif ($msgType === 'ticket_closed') $success = '工单已关闭';
+    elseif ($msgType === 'oauth_bound') $success = '第三方账号绑定成功';
+    elseif ($msgType === 'oauth_register') $success = '注册成功并绑定第三方账号';
+}
+// 当前tab（纯CSS方案：PHP控制默认checked，无需JS）
+$currentTab = $_GET['tab'] ?? 'info';
+$validTabs = ['info','points','hosts','tickets','referral'];
+if (!in_array($currentTab, $validTabs)) $currentTab = 'info';
 
 function getRechargePackages() {
     global $DB;
@@ -137,6 +149,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = getUser();
     }
 
+    if ($action === 'unbind_oauth') {
+        $bindId = intval($_POST['bind_id'] ?? 0);
+        $stmt = $DB->prepare("DELETE FROM oauth_bindings WHERE id=? AND user_id=?");
+        $stmt->execute([$bindId, $user['id']]);
+        $success = '已解绑第三方账号';
+    }
+
     // === 工单操作 ===
     if ($action === 'create_ticket') {
         $subject = trim($_POST['subject'] ?? '');
@@ -147,12 +166,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (mb_strlen($subject) > 200) {
             $error = '工单标题不能超过200字';
         } else {
-            $stmt = $DB->prepare("INSERT INTO tickets(user_id,vhost_id,subject) VALUES(?,?,?)");
-            $stmt->execute([$user['id'], $vhostId, $subject]);
-            $ticketId = $DB->lastInsertId();
-            $stmt2 = $DB->prepare("INSERT INTO ticket_replies(ticket_id,user_id,content) VALUES(?,?,?)");
-            $stmt2->execute([$ticketId, $user['id'], $content]);
-            $success = '工单创建成功';
+            try {
+                $stmt = $DB->prepare("INSERT INTO tickets(user_id,vhost_id,subject) VALUES(?,?,?)");
+                $stmt->execute([$user['id'], $vhostId, $subject]);
+                $ticketId = $DB->lastInsertId();
+                $stmt2 = $DB->prepare("INSERT INTO ticket_replies(ticket_id,user_id,content) VALUES(?,?,?)");
+                $stmt2->execute([$ticketId, $user['id'], $content]);
+                $success = '工单创建成功';
+                $currentTab = 'tickets';
+            } catch (Exception $e) {
+                $error = '工单创建失败：' . $e->getMessage();
+            }
         }
     }
 
@@ -169,11 +193,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (empty($content)) {
             $error = '请输入回复内容';
         } else {
-            $stmt2 = $DB->prepare("INSERT INTO ticket_replies(ticket_id,user_id,content) VALUES(?,?,?)");
-            $stmt2->execute([$ticketId, $user['id'], $content]);
-            $stmt3 = $DB->prepare("UPDATE tickets SET status=0, updated_at=NOW() WHERE id=?");
-            $stmt3->execute([$ticketId]);
-            $success = '回复成功';
+            try {
+                $stmt2 = $DB->prepare("INSERT INTO ticket_replies(ticket_id,user_id,content) VALUES(?,?,?)");
+                $stmt2->execute([$ticketId, $user['id'], $content]);
+                $stmt3 = $DB->prepare("UPDATE tickets SET status=0, updated_at=NOW() WHERE id=?");
+                $stmt3->execute([$ticketId]);
+                $success = '回复成功';
+                $currentTab = 'tickets';
+            } catch (Exception $e) {
+                $error = '回复失败：' . $e->getMessage();
+            }
         }
     }
 
@@ -185,9 +214,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$ticket) {
             $error = '工单不存在';
         } else {
-            $stmt2 = $DB->prepare("UPDATE tickets SET status=2, updated_at=NOW() WHERE id=?");
-            $stmt2->execute([$ticketId]);
-            $success = '工单已关闭';
+            try {
+                $stmt2 = $DB->prepare("UPDATE tickets SET status=2, updated_at=NOW() WHERE id=?");
+                $stmt2->execute([$ticketId]);
+                $success = '工单已关闭';
+                $currentTab = 'tickets';
+            } catch (Exception $e) {
+                $error = '关闭失败：' . $e->getMessage();
+            }
         }
     }
 }
@@ -217,7 +251,7 @@ $referralList = $referralLogs->fetchAll();
 $referralEnabled = conf('referral_enabled', '1') === '1';
 $referralReward = intval(conf('referral_reward_points', '30'));
 
-renderHeader('个人中心');
+renderHeader('个人中心', '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">');
 ?>
 <!-- ========== 个人中心HTML区域 ========== -->
 <div class="panel-grid">
@@ -238,11 +272,21 @@ renderHeader('个人中心');
             <?php endif; ?>
         </div>
         <nav class="panel-nav">
-            <a href="#" class="panel-nav-item active" onclick="showPanel('info')">个人信息</a>
-            <a href="#" class="panel-nav-item" onclick="showPanel('points')">积分中心</a>
-            <a href="#" class="panel-nav-item" onclick="showPanel('hosts')">我的主机</a>
-            <a href="#" class="panel-nav-item" onclick="showPanel('tickets')">我的工单</a>
-            <a href="#" class="panel-nav-item" onclick="showPanel('referral')">推荐奖励</a>
+            <label class="panel-nav-item">
+                <input type="radio" name="panel-tab" value="info" class="panel-tab-radio"<?php echo $currentTab==='info'?' checked':''; ?> onchange="switchPanel(this.value)"> 个人信息
+            </label>
+            <label class="panel-nav-item">
+                <input type="radio" name="panel-tab" value="points" class="panel-tab-radio"<?php echo $currentTab==='points'?' checked':''; ?> onchange="switchPanel(this.value)"> 积分中心
+            </label>
+            <label class="panel-nav-item">
+                <input type="radio" name="panel-tab" value="hosts" class="panel-tab-radio"<?php echo $currentTab==='hosts'?' checked':''; ?> onchange="switchPanel(this.value)"> 我的主机
+            </label>
+            <label class="panel-nav-item">
+                <input type="radio" name="panel-tab" value="tickets" class="panel-tab-radio"<?php echo $currentTab==='tickets'?' checked':''; ?> onchange="switchPanel(this.value)"> 我的工单
+            </label>
+            <label class="panel-nav-item">
+                <input type="radio" name="panel-tab" value="referral" class="panel-tab-radio"<?php echo $currentTab==='referral'?' checked':''; ?> onchange="switchPanel(this.value)"> 推荐奖励
+            </label>
         </nav>
     </div>
 
@@ -264,9 +308,66 @@ renderHeader('个人中心');
                 <div class="info-row"><span>邮箱</span><span><?php echo h($user['email']); ?></span></div>
                 <div class="info-row"><span>注册时间</span><span><?php echo date('Y-m-d', strtotime($user['created_at'])); ?></span></div>
             </div>
+
+            <?php
+            // 第三方账号绑定管理
+            if (conf('oauth_enabled') === '1') {
+                $oauthNames = [
+                    'qq'=>'QQ','wx'=>'微信','alipay'=>'支付宝','sina'=>'微博','baidu'=>'百度','douyin'=>'抖音',
+                    'huawei'=>'华为','xiaomi'=>'小米','google'=>'谷歌','microsoft'=>'微软','dingtalk'=>'钉钉',
+                    'feishu'=>'飞书','gitee'=>'Gitee','github'=>'GitHub'
+                ];
+                $oauthIcons = [
+                    'qq'=>'fab fa-qq','wx'=>'fab fa-weixin','alipay'=>'fab fa-alipay','sina'=>'fab fa-weibo',
+                    'baidu'=>'svg','douyin'=>'fab fa-tiktok','google'=>'fab fa-google',
+                    'microsoft'=>'svg','dingtalk'=>'custom','feishu'=>'custom',
+                    'gitee'=>'fab fa-git-alt','github'=>'fab fa-github','huawei'=>'svg','xiaomi'=>'svg',
+                ];
+                try {
+                    $stmtOauth = $DB->prepare("SELECT * FROM oauth_bindings WHERE user_id=?");
+                    $stmtOauth->execute([$user['id']]);
+                    $bindings = $stmtOauth->fetchAll();
+                } catch (Exception $e) { $bindings = []; }
+                // 引入OAuth图标渲染
+                require_once ROOT . 'oauth.php';
+            ?>
+            <div class="section-card" style="margin-top:16px">
+                <h3><i class="fas fa-link"></i> 第三方账号绑定</h3>
+                <?php if (empty($bindings)): ?>
+                <p style="color:#888;padding:12px 0">暂未绑定任何第三方账号</p>
+                <?php else: ?>
+                <div style="display:flex;flex-direction:column;gap:12px;margin:12px 0">
+                    <?php foreach ($bindings as $b):
+                        $typeName = $oauthNames[$b['oauth_type']] ?? $b['oauth_type'];
+                        $typeKey = $b['oauth_type'];
+                        $typeInfo = $OAUTH_TYPES[$typeKey] ?? ['name'=>$typeName,'icon_type'=>'fa','icon'=>'fas fa-link','color'=>'#666'];
+                    ?>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:#f8f9fa;border-radius:10px">
+                        <div style="display:flex;align-items:center;gap:10px">
+                            <?php $bindBg = oauthNeedBackground($typeKey, $typeInfo) ? 'background:' . h($typeInfo['color']) . ';color:#fff;' : 'background:none;color:#333;'; ?>
+                            <span style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;<?php echo $bindBg; ?>"><?php echo renderOauthIconByKey($typeKey, $typeInfo); ?></span>
+                            <div>
+                                <div style="font-weight:600"><?php echo h($typeName); ?></div>
+                                <?php if (!empty($b['nickname'])): ?>
+                                <div style="font-size:.85rem;color:#888"><?php echo h($b['nickname']); ?></div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <form method="post" style="margin:0" onsubmit="return confirm('确定要解绑<?php echo h($typeName); ?>账号吗？')">
+                            <input type="hidden" name="action" value="unbind_oauth">
+                            <input type="hidden" name="bind_id" value="<?php echo $b['id']; ?>">
+                            <button type="submit" style="padding:6px 14px;border-radius:8px;border:1px solid #ddd;background:#fff;color:#e74c3c;cursor:pointer;font-size:.85rem">解绑</button>
+                        </form>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                <a href="login.php" style="display:inline-block;margin-top:8px;color:#6c5ce7;text-decoration:none;font-size:.85rem">← 前往登录页绑定更多账号</a>
+            </div>
+            <?php } ?>
         </div>
 
-        <div id="panel-points" class="panel-section" style="display:none">
+        <div id="panel-points" class="panel-section">
             <div class="section-card">
                 <h3>每日签到</h3>
                 <?php if ($canSign): ?>
@@ -304,7 +405,7 @@ renderHeader('个人中心');
             </div>
         </div>
 
-        <div id="panel-hosts" class="panel-section" style="display:none">
+        <div id="panel-hosts" class="panel-section">
             <div class="section-card">
                 <div class="section-header">
                     <h3>我的虚拟主机</h3>
@@ -351,7 +452,7 @@ renderHeader('个人中心');
             </div>
         </div>
 
-        <div id="panel-tickets" class="panel-section" style="display:none">
+        <div id="panel-tickets" class="panel-section">
             <div class="section-card">
                 <div class="section-header">
                     <h3>我的工单</h3>
@@ -444,7 +545,7 @@ renderHeader('个人中心');
             </div>
         </div>
 
-        <div id="panel-referral" class="panel-section" style="display:none">
+        <div id="panel-referral" class="panel-section">
             <?php if (!$referralEnabled): ?>
             <div class="section-card">
                 <div class="empty-state">
@@ -511,42 +612,27 @@ renderHeader('个人中心');
 </div>
 
 <script>
-function copyInviteCode() {
-    var code = document.getElementById('myInviteCode').textContent;
-    navigator.clipboard.writeText(code).then(function() {
-        alert('推荐码已复制到剪贴板！');
-    }).catch(function() {
-        var input = document.createElement('input');
-        input.value = code;
-        document.body.appendChild(input);
-        input.select();
-        document.execCommand('copy');
-        document.body.removeChild(input);
-        alert('推荐码已复制到剪贴板！');
-    });
+function switchPanel(name) {
+    document.querySelectorAll('.panel-section').forEach(function(s){ s.style.display = 'none'; });
+    document.querySelectorAll('.panel-nav-item').forEach(function(n){ n.classList.remove('active'); });
+    var section = document.getElementById('panel-' + name);
+    if (section) section.style.display = 'block';
+    var radio = document.querySelector('.panel-tab-radio[value="' + name + '"]');
+    if (radio) radio.closest('.panel-nav-item').classList.add('active');
 }
-function shareToFriend() {
-    var code = document.getElementById('myInviteCode').textContent;
-    var shareUrl = window.location.origin + '/login.php?mode=register&invite=' + code;
-    var text = '注册即送积分！使用我的推荐码 ' + code + ' 注册，双方各获积分奖励！';
-    
-    if (navigator.share) {
-        navigator.share({
-            title: '推荐注册',
-            text: text,
-            url: shareUrl
-        }).catch(function() {});
-    } else {
-        navigator.clipboard.writeText(shareUrl).then(function() {
-            alert('分享链接已复制到剪贴板！\n\n链接：' + shareUrl);
-        }).catch(function() {
-            prompt('请复制以下分享链接：', shareUrl);
-        });
-    }
-}
+// 页面加载时显示默认tab
+(function(){
+    var checked = document.querySelector('.panel-tab-radio:checked');
+    if (checked) switchPanel(checked.value);
+})();
 </script>
 
 <style>
+/* 单选框当tab：radio隐藏，label样式化，JS控制切换 */
+.panel-tab-radio{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
+.panel-section{display:none}
+.panel-nav-item{cursor:pointer;text-decoration:none;display:block}
+.panel-nav-item.active{color:var(--accent,#667eea);font-weight:700}
 .section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
 .badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:.75rem;font-weight:600;background:#667eea;color:#fff}
 .badge-success{background:#10b981;color:#fff}
@@ -576,12 +662,6 @@ function shareToFriend() {
 </style>
 
 <script>
-function showPanel(id){
-    document.querySelectorAll('.panel-section').forEach(function(el){el.style.display='none'});
-    document.querySelectorAll('.panel-nav-item').forEach(function(el){el.classList.remove('active')});
-    document.getElementById('panel-'+id).style.display='block';
-    event.target.classList.add('active');
-}
 function toggleTicketDetail(id){
     var el=document.getElementById('ticket-detail-'+id);
     el.style.display=el.style.display==='none'?'block':'none';
@@ -590,6 +670,34 @@ function copyText(el){
     var r=document.createRange();r.selectNode(el);window.getSelection().removeAllRanges();window.getSelection().addRange(r);
     try{document.execCommand('copy');el.classList.add('copied');setTimeout(function(){el.classList.remove('copied')},1000)}catch(e){}
     window.getSelection().removeAllRanges();
+}
+function copyInviteCode() {
+    var code = document.getElementById('myInviteCode').textContent;
+    navigator.clipboard.writeText(code).then(function() {
+        alert('推荐码已复制到剪贴板！');
+    }).catch(function() {
+        var input = document.createElement('input');
+        input.value = code;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+        alert('推荐码已复制到剪贴板！');
+    });
+}
+function shareToFriend() {
+    var code = document.getElementById('myInviteCode').textContent;
+    var shareUrl = window.location.origin + '/login.php?mode=register&invite=' + code;
+    var text = '注册即送积分！使用我的推荐码 ' + code + ' 注册，双方各获积分奖励！';
+    if (navigator.share) {
+        navigator.share({ title: '推荐注册', text: text, url: shareUrl }).catch(function() {});
+    } else {
+        navigator.clipboard.writeText(shareUrl).then(function() {
+            alert('分享链接已复制到剪贴板！\n\n链接：' + shareUrl);
+        }).catch(function() {
+            prompt('请复制以下分享链接：', shareUrl);
+        });
+    }
 }
 document.addEventListener('DOMContentLoaded', function(){
     var radios = document.querySelectorAll('input[name="pay_type"]');

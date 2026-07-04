@@ -76,6 +76,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     max_per_user INT NOT NULL DEFAULT 0
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+                $pdo->exec("CREATE TABLE IF NOT EXISTS vhost_categories (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(50) NOT NULL,
+                    parent_id INT NULL,
+                    level TINYINT NOT NULL DEFAULT 1,
+                    sort_order INT NOT NULL DEFAULT 0,
+                    FOREIGN KEY (parent_id) REFERENCES vhost_categories(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                $pdo->exec("CREATE TABLE IF NOT EXISTS vhost_model_durations (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    model_id INT NOT NULL,
+                    duration_type VARCHAR(20) NOT NULL,
+                    discount INT NOT NULL DEFAULT 0,
+                    enabled TINYINT NOT NULL DEFAULT 0,
+                    FOREIGN KEY (model_id) REFERENCES vhost_models(id) ON DELETE CASCADE,
+                    UNIQUE KEY uk_model_dur (model_id, duration_type)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                $pdo->exec("CREATE TABLE IF NOT EXISTS vhost_model_elastic (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    model_id INT NOT NULL,
+                    field_name VARCHAR(20) NOT NULL,
+                    min_value INT NOT NULL,
+                    max_value INT NOT NULL,
+                    step INT NOT NULL DEFAULT 1,
+                    unit_price INT NOT NULL DEFAULT 0,
+                    enabled TINYINT NOT NULL DEFAULT 0,
+                    FOREIGN KEY (model_id) REFERENCES vhost_models(id) ON DELETE CASCADE,
+                    UNIQUE KEY uk_model_field (model_id, field_name)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
                 $pdo->exec("CREATE TABLE IF NOT EXISTS vhosts (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     user_id INT NOT NULL,
@@ -189,6 +221,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+                $pdo->exec("CREATE TABLE IF NOT EXISTS oauth_bindings (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    oauth_type VARCHAR(20) NOT NULL,
+                    social_uid VARCHAR(100) NOT NULL,
+                    nickname VARCHAR(100) NULL,
+                    faceimg VARCHAR(500) NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uk_type_uid (oauth_type, social_uid),
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
                 $defaults = [
                     'site_name' => $siteName,
                     'mnbt_api_url' => '', 'mnbt_bh' => '', 'mnbt_key' => '', 'mnbt_keye' => '', 'mnbt_vs' => '16',
@@ -204,9 +249,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'register_points_enabled' => '1', 'register_points' => '100',
                     'points_200_price' => '10', 'points_400_price' => '18',
                     'points_1000_price' => '40', 'points_3000_price' => '100',
-                    'current_version' => '1.2.0',
+                    'current_version' => '1.3.0',
                     'update_api_url' => 'https://staridc.fangqihang.cn/api.php',
                     'max_hosts_per_user' => '5',
+                    'oauth_enabled' => '0',
+                    'oauth_api_url' => 'https://login.az0.cn/connect.php',
+                    'oauth_appid' => '',
+                    'oauth_appkey' => '',
+                    'oauth_types' => 'qq,wx,alipay',
+                    'oauth_icon_img_dingtalk' => '', 'oauth_icon_text_dingtalk' => '钉',
+                    'oauth_icon_img_feishu' => '', 'oauth_icon_text_feishu' => '飞',
                 ];
                 $stmt = $pdo->prepare("INSERT INTO config(k,v) VALUES(?,?) ON DUPLICATE KEY UPDATE v=VALUES(v)");
                 foreach ($defaults as $k => $v) {
