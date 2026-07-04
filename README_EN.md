@@ -37,6 +37,9 @@
 - **Multi-server support**: Connect to multiple BT MNBT servers simultaneously, assign different server to each hosting plan
 - Full lifecycle management: **renewal**, **suspend/unsuspend**, **deletion**, **password reset**
 - Flexible hosting plan configuration with customizable space, traffic, and domain limits
+- **Three-level Categories**: Hosting plans can be organized by primary/secondary/tertiary categories
+- **Duration Discounts**: Support monthly/quarterly/semi-annual/annual/multi-year billing with independent discounts
+- **Elastic Configuration**: Allow users to adjust space, traffic, and domain limits when purchasing
 
 ### 💰 Points Economy System
 
@@ -50,17 +53,20 @@
 ### 🔐 User System
 
 - Email registration/login with **email verification codes**
+- **OAuth aggregate login**: Support QQ, WeChat, Alipay, Weibo, Baidu, TikTok, Huawei, Xiaomi, Google, Microsoft, DingTalk, Feishu, Gitee, GitHub and more
 - Login lockout mechanism (5 failed attempts locks for 15 minutes)
 - **"Remember me"** auto-login (7-day validity)
 - Password recovery
 - Email domain whitelist restriction
+- User dashboard supports binding/unbinding third-party accounts
 
 ### ⚙️ Admin Dashboard
 
 - **Dashboard**: Data statistics overview (users, hosts, servers, orders, visits)
-- **System Config**: MNBT integration, payment gateway, email service, site settings
+- **System Config**: MNBT integration, payment gateway, email service, OAuth login, site settings
 - **Server Management**: Add/edit/delete/toggle MNBT servers with connection testing
-- **Hosting Plan Management**: Add/listing control, assign server to each plan, set per-plan purchase limits
+- **Category Management**: Add/edit/delete three-level hosting categories
+- **Hosting Plan Management**: Add/edit/listing control, assign server/category to each plan, set per-plan purchase limits, duration discounts and elastic configuration
 - **User Management**: Search/edit, batch points, batch delete
 - **Host Management**: View/delete/sync
 - **Recharge Package Management**: Custom points packages with list/unlist control
@@ -188,6 +194,55 @@ Configure in Admin → Pricing:
 | Referral Points | 50 | Points for successful referral |
 | Points Packages | Custom | Multiple top-up tiers with points ratio |
 
+### OAuth Aggregate Login Configuration
+
+Configure in Admin → System Config → OAuth:
+
+| Setting | Description |
+| ------- | ----------- |
+| Enable OAuth | Master switch |
+| API URL | Aggregate login platform URL (e.g. Rainbow OAuth) |
+| AppID | AppID assigned by the platform |
+| AppKey | AppKey assigned by the platform |
+| Enabled Platforms | Select login channels to enable |
+
+When a user logs in via OAuth for the first time, they can bind to an existing local account or auto-create a new one.
+
+### Hosting Category Configuration
+
+Manage three-level categories in Admin → Categories:
+
+| Setting | Description |
+| ------- | ----------- |
+| Category Name | Display name on frontend |
+| Parent Category | Belongs to primary/secondary category; leave empty for top-level |
+| Sort Order | Display order among siblings |
+
+When adding a plan, specify its category; `cart.php` will display plans by category hierarchy.
+
+### Duration Discount Configuration
+
+Configure in Admin → Hosting Plans → Edit Plan → Duration Discounts:
+
+| Setting | Description |
+| ------- | ----------- |
+| Monthly | Base monthly price (same as plan base price) |
+| Quarterly/Semi-annual/Annual/Multi-year | Set discount for each duration, e.g. 95 for 5% off |
+
+The system deducts points based on discounted price when user selects duration on frontend.
+
+### Elastic Configuration
+
+Enable **Elastic Configuration** in Admin → Hosting Plans → Edit Plan:
+
+| Setting | Description |
+| ------- | ----------- |
+| Min/Max | User adjustable range |
+| Step | Increment per adjustment |
+| Unit Price | Extra points for each step increased |
+
+Applies to web space, database space, monthly traffic, and domain binding count. Users can elastically scale these when purchasing.
+
 ***
 
 ## 📁 Project Structure
@@ -196,6 +251,7 @@ Configure in Admin → Pricing:
 staridc/
 ├── index.php                 # Homepage
 ├── login.php                 # Login / Register
+├── oauth.php                 # OAuth Aggregate Login
 ├── personalpanel.php         # User Dashboard
 ├── cart.php                  # Hosting Purchase
 ├── captcha.php               # Image Captcha
@@ -241,13 +297,13 @@ Create a new folder and `style.css` under `theme/`, overriding the system-define
 
 ### Core Class Extension
 
-- **MNBT API**: [rd/MNBT\_API.php](file:///d:/yun/26-5-6/rd/MNBT_API.php) — Wraps BT Panel communication, replaceable with other virtual host management interfaces
-- **Payment Gateway**: [rd/PayAPI.php](file:///d:/yun/26-5-6/rd/PayAPI.php) — EPay integration, reference for implementing other payment channels
-- **Framework Core**: [rd/bootstrap.php](file:///d:/yun/26-5-6/rd/bootstrap.php) — Core functions, DB connection, Mailer class
+- **MNBT API**: [rd/MNBT\_API.php](rd/MNBT_API.php) — Wraps BT Panel communication, replaceable with other virtual host management interfaces
+- **Payment Gateway**: [rd/PayAPI.php](rd/PayAPI.php) — EPay integration, reference for implementing other payment channels
+- **Framework Core**: [rd/bootstrap.php](rd/bootstrap.php) — Core functions, DB connection, Mailer class
 
 ### Database Extension
 
-All table creation statements are managed centrally in [install/index.php](file:///d:/yun/26-5-6/install/index.php#L36-L200). New fields or tables can be maintained there. Existing users should run [upgrade.php](file:///d:/yun/26-5-6/upgrade.php) for database migration.
+All table creation statements are managed centrally in [install/index.php](install/index.php#L36-L200). New fields or tables can be maintained there. Existing users should run [upgrade.php](upgrade.php) for database migration.
 
 ### Core Business Flow
 
