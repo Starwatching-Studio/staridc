@@ -343,6 +343,40 @@ This project is open-sourced under the **MIT License**. See the [LICENSE](LICENS
 
 ***
 
+***
+
+## 📝 Changelog
+
+### v1.4.9 (2026-07-09)
+
+#### 🚀 New Features
+
+- **Admin Ticket Email Notification**: Bind email to receive alerts for new tickets
+- **Admin Ticket Badge**: Navigation menu shows pulsing red dot when tickets pending
+- **Admin Menu Grouping**: Merged categories/models into product settings, added two-level menus
+- **Dashboard Consumption Stats**: 30-day consumption overview
+- **Purchase/Renew Loading Animation**: Full-screen overlay to prevent confusion
+
+#### 🐛 Bug Fixes
+
+- CSRF security validation with AJAX compatibility
+- Elastic config products not showing on cart page
+- System error when deleting the last hosting plan
+- API key copy button not working (cross-browser compatible fallback)
+- Purchase buttons showing "undefined" text
+
+#### 🎨 UI Improvements
+
+- Admin color scheme changed from blue-purple to fresh green
+- Cart page category logic optimized
+
+#### ⚡ Other
+
+- Removed default categories, let admin create their own
+- Legacy URL auto-redirect for seamless upgrade
+
+***
+
 <p align="center">
   <b>StarIDC</b> — by Starwatching Studio<br>
   <sub>Built with ❤️ for the open-source community</sub>
