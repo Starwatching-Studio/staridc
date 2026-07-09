@@ -498,17 +498,18 @@ a:hover { color: var(--accent-light); }
 
 .form-group { margin-bottom: 20px; }
 .form-group label { display: block; margin-bottom: 10px; font-weight: 600; font-size: 0.92rem; color: var(--muted); }
-.form-group input, .form-group select {
+.form-group input, .form-group select, .form-group textarea {
     width: 100%; padding: 14px 18px; border: 1px solid var(--border); border-radius: var(--radius-sm);
     background: rgba(255, 255, 255, 0.05);
     font-size: 0.98rem; outline: none; color: var(--fg);
     transition: all var(--transition);
 }
-.form-group input:focus {
+.form-group textarea { resize: vertical; min-height: 100px; }
+.form-group input:focus, .form-group textarea:focus {
     border-color: var(--accent);
     box-shadow: 0 0 20px rgba(0, 217, 255, 0.15);
 }
-.form-group input::placeholder { color: var(--muted); opacity: 0.5; }
+.form-group input::placeholder, .form-group textarea::placeholder { color: var(--muted); opacity: 0.5; }
 
 .info-row { 
     display: flex; justify-content: space-between; align-items: center; 
@@ -580,6 +581,10 @@ a:hover { color: var(--accent-light); }
     border-color: var(--success);
     color: var(--success);
 }
+.copy-btn { display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:3px;opacity:.45;transition:all .2s;vertical-align:middle;margin-left:4px;flex-shrink:0 }
+.copy-btn:hover { opacity:1;border-color:var(--accent);background:rgba(0,217,255,.15);box-shadow:0 0 12px rgba(0,217,255,.15) }
+.copy-btn:hover svg { stroke:var(--accent) }
+.copy-btn svg { width:14px;height:14px;stroke:var(--fg);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round }
 
 .badge { display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
 .badge-green { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); }

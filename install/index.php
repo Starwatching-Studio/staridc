@@ -118,9 +118,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     expire_time DATETIME NULL,
                     expire_warned TINYINT(1) NOT NULL DEFAULT 0,
                     server_id INT NULL DEFAULT NULL,
+                    web_space INT NULL DEFAULT NULL,
+                    db_space INT NULL DEFAULT NULL,
+                    flow INT NULL DEFAULT NULL,
+                    domain_limit INT NULL DEFAULT NULL,
                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                     FOREIGN KEY (model_id) REFERENCES vhost_models(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                $pdo->exec("CREATE TABLE IF NOT EXISTS cart_items (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    model_id INT NOT NULL,
+                    duration_type VARCHAR(20) NOT NULL DEFAULT 'month',
+                    elastic_values TEXT NULL,
+                    coupon_code VARCHAR(50) NULL,
+                    quantity INT NOT NULL DEFAULT 1,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                    FOREIGN KEY (model_id) REFERENCES vhost_models(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                $pdo->exec("CREATE TABLE IF NOT EXISTS api_keys (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    api_key VARCHAR(64) NOT NULL UNIQUE,
+                    name VARCHAR(50) NOT NULL DEFAULT '',
+                    status TINYINT NOT NULL DEFAULT 1,
+                    last_used_at DATETIME NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
                 $pdo->exec("CREATE TABLE IF NOT EXISTS mnbt_servers (
@@ -249,7 +277,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'register_points_enabled' => '1', 'register_points' => '100',
                     'points_200_price' => '10', 'points_400_price' => '18',
                     'points_1000_price' => '40', 'points_3000_price' => '100',
-                    'current_version' => '1.3.0',
+                    'current_version' => '1.4.9',
                     'update_api_url' => 'https://staridc.fangqihang.cn/api.php',
                     'max_hosts_per_user' => '5',
                     'oauth_enabled' => '0',

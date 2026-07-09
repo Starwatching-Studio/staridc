@@ -214,8 +214,8 @@ if ($act === 'callback') {
     // 检查是否启用了邮箱注册，如果启用了邮箱验证，则无法直接创建用户，需要跳转到绑定页面
     $mailEnabled = conf('mail_enabled') === '1';
 
-    // 尝试用昵称生成一个占位邮箱（如果系统未强制邮箱验证）
-    if (!$mailEnabled) {
+    // 尝试用昵称生成一个占位邮箱（如果系统未强制邮箱验证且无域名白名单限制）
+    if (!$mailEnabled && !($domainRestrict && !empty($domainWhitelist))) {
         // 未启用邮箱验证，可以直接创建用户
         $fakeEmail = $type . '_' . substr(md5($socialUid), 0, 10) . '@oauth.local';
         $finalNickname = !empty($nickname) ? $nickname : ($OAUTH_TYPES[$type]['name'] . '用户' . substr(md5($socialUid), 0, 6));
@@ -387,7 +387,7 @@ if ($act === 'bind') {
         <div class="auth-card">
             <div style="text-align:center;margin-bottom:20px">
                 <div style="font-size:2.5rem;color:<?php echo $OAUTH_TYPES[$type]['color']; ?>;margin-bottom:8px">
-                    <i class="<?php echo $OAUTH_TYPES[$type]['icon']; ?>"></i>
+                    <?php echo renderOauthIconByKey($type, $OAUTH_TYPES[$type]); ?>
                 </div>
                 <h3>绑定<?php echo h($oauthName); ?>账号</h3>
                 <?php if (!empty($pending['nickname'])): ?>
@@ -406,6 +406,7 @@ if ($act === 'bind') {
 
             <!-- 注册新账号 -->
             <form method="post" class="auth-form" id="registerForm">
+                <?php echo csrfField(); ?>
                 <input type="hidden" name="bind_mode" value="register">
                 <div class="form-group">
                     <label>邮箱 <span style="color:#e74c3c">*</span></label>
@@ -440,6 +441,7 @@ if ($act === 'bind') {
 
             <!-- 绑定已有账号 -->
             <form method="post" class="auth-form" id="loginForm" style="display:none">
+                <?php echo csrfField(); ?>
                 <input type="hidden" name="bind_mode" value="login">
                 <div class="form-group">
                     <label>邮箱 / 昵称</label>
@@ -474,8 +476,8 @@ if ($act === 'bind') {
         fetch('oauth.php?act=bind&send_code=1', {method:'POST', body:fd})
         .then(function(r){return r.json()})
         .then(function(d){
-            if(d.code===200){alert(d.msg);var c=60;btn.textContent=c+'s';var t=setInterval(function(){c--;btn.textContent=c+'s';if(c<=0){clearInterval(t);btn.disabled=false;btn.textContent='发送验证码';}},1000);}
-            else{alert(d.msg);btn.disabled=false;btn.textContent='发送验证码';}
+            if(d.code===200){alert(d.message);var c=60;btn.textContent=c+'s';var t=setInterval(function(){c--;btn.textContent=c+'s';if(c<=0){clearInterval(t);btn.disabled=false;btn.textContent='发送验证码';}},1000);}
+            else{alert(d.message);btn.disabled=false;btn.textContent='发送验证码';}
         })
         .catch(function(){alert('请求失败');btn.disabled=false;btn.textContent='发送验证码';});
     }

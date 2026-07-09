@@ -38,15 +38,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($ajaxAction === 'get_models') {
         header('Content-Type: application/json; charset=utf-8');
         $categoryId = intval($_POST['category_id'] ?? 0);
-        $stmt = $DB->prepare("SELECT id, name, price, web_space, db_space, flow, domain_limit, is_elastic FROM vhost_models WHERE status=1 AND category_id=? ORDER BY sort_order, id");
-        $stmt->execute([$categoryId]);
+        // 加载当前分类及其所有后代分类下的型号
+        $catIds = [$categoryId];
+        try {
+            $catRows = $DB->query("SELECT id, parent_id FROM vhost_categories")->fetchAll();
+            $catChildren = [];
+            foreach ($catRows as $cr) {
+                if ($cr['parent_id']) {
+                    $catChildren[$cr['parent_id']][] = $cr['id'];
+                }
+            }
+            $queue = [$categoryId];
+            while (!empty($queue)) {
+                $pid = array_shift($queue);
+                if (isset($catChildren[$pid])) {
+                    foreach ($catChildren[$pid] as $cid) {
+                        $catIds[] = $cid;
+                        $queue[] = $cid;
+                    }
+                }
+            }
+        } catch (Exception $e) {}
+        $inClause = implode(',', array_fill(0, count($catIds), '?'));
+        $stmt = $DB->prepare("SELECT id, name, price, web_space, db_space, flow, domain_limit, is_elastic FROM vhost_models WHERE status=1 AND category_id IN ({$inClause}) ORDER BY sort_order, id");
+        $stmt->execute($catIds);
         $models = $stmt->fetchAll();
         // 为弹性型号附加 elastic 配置数据（供产品卡片显示范围）
         foreach ($models as &$m) {
             if ($m['is_elastic'] == 1) {
-                $eStmt = $DB->prepare("SELECT field_name, min_value, max_value FROM vhost_model_elastic WHERE model_id=? AND enabled=1");
-                $eStmt->execute([$m['id']]);
-                $m['elastic'] = $eStmt->fetchAll();
+                try {
+                    $eStmt = $DB->prepare("SELECT field_name, min_value, max_value FROM vhost_model_elastic WHERE model_id=? AND enabled=1");
+                    $eStmt->execute([$m['id']]);
+                    $m['elastic'] = $eStmt->fetchAll();
+                } catch (Exception $e) {
+                    $m['elastic'] = [];
+                }
             } else {
                 $m['elastic'] = [];
             }
@@ -59,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     // ---- 需登录接口 ----
     if (!$loggedIn) {
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['error' => '请先登录'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['error' => L('buy_please_login')], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -76,9 +102,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $stmt = $DB->prepare("SELECT duration_type, discount FROM vhost_model_durations WHERE model_id=? AND enabled=1 ORDER BY FIELD(duration_type, 'month','quarter','half_year','year','2year','3year','5year','10year')");
         $stmt->execute([$modelId]);
         $durations = $stmt->fetchAll();
-        $stmt = $DB->prepare("SELECT field_name, min_value, max_value, step, unit_price FROM vhost_model_elastic WHERE model_id=? AND enabled=1");
-        $stmt->execute([$modelId]);
-        $elastic = $stmt->fetchAll();
+        try {
+            $stmt = $DB->prepare("SELECT field_name, min_value, max_value, step, unit_price FROM vhost_model_elastic WHERE model_id=? AND enabled=1");
+            $stmt->execute([$modelId]);
+            $elastic = $stmt->fetchAll();
+        } catch (Exception $e) {
+            $elastic = [];
+        }
         echo json_encode([
             'model' => $model,
             'durations' => $durations,
@@ -114,9 +144,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $elasticSurcharge = 0;
         if ($model['is_elastic']) {
             $elasticValues = json_decode($elasticValuesJson, true) ?: [];
-            $stmt = $DB->prepare("SELECT field_name, min_value, max_value, step, unit_price FROM vhost_model_elastic WHERE model_id=? AND enabled=1");
-            $stmt->execute([$modelId]);
-            $elasticConfigs = $stmt->fetchAll();
+            try {
+                $stmt = $DB->prepare("SELECT field_name, min_value, max_value, step, unit_price FROM vhost_model_elastic WHERE model_id=? AND enabled=1");
+                $stmt->execute([$modelId]);
+                $elasticConfigs = $stmt->fetchAll();
+            } catch (Exception $e) {
+                $elasticConfigs = [];
+            }
             foreach ($elasticConfigs as $ec) {
                 $fn = $ec['field_name'];
                 $baseVal = intval($model[$fn] ?? 0);
@@ -135,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $stmt->execute([$code]);
         $cp = $stmt->fetch();
         if (!$cp) {
-            echo json_encode(['valid' => false, 'message' => '优惠码无效、已用完或已过期'], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['valid' => false, 'message' => L('coupon_invalid')], JSON_UNESCAPED_UNICODE);
             exit;
         }
         if ($cp['model_id'] !== null && intval($cp['model_id']) !== $modelId) {
@@ -186,9 +220,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $finalDomainLimit = intval($model['domain_limit']);
 
                 if ($model['is_elastic']) {
-                    $stmt = $DB->prepare("SELECT field_name, min_value, max_value, step, unit_price FROM vhost_model_elastic WHERE model_id=? AND enabled=1");
-                    $stmt->execute([$modelId]);
-                    $elasticConfigs = $stmt->fetchAll();
+                    try {
+                        $stmt = $DB->prepare("SELECT field_name, min_value, max_value, step, unit_price FROM vhost_model_elastic WHERE model_id=? AND enabled=1");
+                        $stmt->execute([$modelId]);
+                        $elasticConfigs = $stmt->fetchAll();
+                    } catch (Exception $e) {
+                        $elasticConfigs = [];
+                    }
                     foreach ($elasticConfigs as $ec) {
                         $fn = $ec['field_name'];
                         $baseVal = intval($model[$fn] ?? 0);
@@ -226,12 +264,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             $finalPrice = intval(ceil($subtotal * (100 - $couponDiscount) / 100));
                         }
                     } else {
-                        $error = '优惠码无效、已用完或已过期';
+                        $error = L('coupon_invalid');
                     }
                 }
 
                 if (!$error && $user['points'] < $finalPrice) {
-                    $error = '积分不足，请先充值积分';
+                    $error = L('buy_insufficient_points');
                 }
 
                 if (!$error) {
@@ -273,10 +311,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             }
                             $stmt2 = $DB->prepare("UPDATE users SET points=points-? WHERE id=?");
                             $stmt2->execute([$finalPrice, $user['id']]);
-                            $stmt3 = $DB->prepare("INSERT INTO vhosts(user_id,model_id,account,password,mnbt_opened,expire_time,server_id) VALUES(?,?,?,?,1,?,?)");
-                            $stmt3->execute([$user['id'], $modelId, $account, $password, $expireTime, $model['server_id']]);
+                            $stmt3 = $DB->prepare("INSERT INTO vhosts(user_id,model_id,account,password,mnbt_opened,expire_time,server_id,web_space,db_space,flow,domain_limit) VALUES(?,?,?,?,1,?,?,?,?,?,?)");
+                            $stmt3->execute([$user['id'], $modelId, $account, $password, $expireTime, $model['server_id'], $finalWebSpace, $finalDbSpace, $finalFlow, $finalDomainLimit]);
                             $discountInfo = $couponDiscount ? "（优惠码省了 " . ($subtotal - $finalPrice) . " 积分）" : "";
-                            $success = '主机开通成功！账号：' . h($account) . '，到期时间：' . $expireTime . $discountInfo;
+                            $success = L('buy_success') . '！' . L('panel_account') . '：' . h($account) . '，' . L('panel_expire_time') . '：' . $expireTime . $discountInfo;
                             $user = getUser();
                             if (conf('mail_notify_host') === '1') {
                                 $notifySubject = '主机开通成功 - ' . conf('site_name', '云主机');
@@ -289,12 +327,142 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 Mailer::sendNotify($user['email'], $notifySubject, $notifyBody);
                             }
                         } else {
-                            $error = 'MNBT开通失败：' . $mnbtResult['message'];
+                            $error = L('buy_mnbt_fail') . '：' . $mnbtResult['message'];
                         }
                     }
                 }
             }
         }
+    }
+}
+
+// ========== 购物车 AJAX ==========
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    $ajaxAction = $_POST['action'];
+
+    if ($ajaxAction === 'add_to_cart') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (!$user) { echo json_encode(['ok' => false, 'message' => L('buy_please_login')]); exit; }
+    $modelId = intval($_POST['model_id'] ?? 0);
+    $durationType = $_POST['duration_type'] ?? 'month';
+    $elasticValues = $_POST['elastic_values'] ?? '';
+    $couponCode = trim($_POST['coupon_code'] ?? '');
+    $quantity = max(1, intval($_POST['quantity'] ?? 1));
+    // 验证型号是否存在且启用
+    $chkStmt = $DB->prepare("SELECT id FROM vhost_models WHERE id=? AND status=1");
+    $chkStmt->execute([$modelId]);
+    if (!$chkStmt->fetch()) {
+        echo json_encode(['ok' => false, 'message' => '该主机型号不存在或已下架']);
+        exit;
+    }
+    $stmt = $DB->prepare("INSERT INTO cart_items (user_id, model_id, duration_type, elastic_values, coupon_code, quantity) VALUES (?,?,?,?,?,?)");
+    $stmt->execute([$user['id'], $modelId, $durationType, $elasticValues, $couponCode, $quantity]);
+    echo json_encode(['ok' => true, 'message' => '已加入购物车', 'cart_count' => getCartCount($user['id'])]);
+    exit;
+}
+if ($ajaxAction === 'remove_from_cart') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (!$user) { echo json_encode(['ok' => false, 'message' => L('buy_please_login')]); exit; }
+    $itemId = intval($_POST['item_id'] ?? 0);
+    $DB->prepare("DELETE FROM cart_items WHERE id=? AND user_id=?")->execute([$itemId, $user['id']]);
+    echo json_encode(['ok' => true, 'cart_count' => getCartCount($user['id'])]);
+    exit;
+}
+if ($ajaxAction === 'get_cart') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (!$user) { echo json_encode(['items' => [], 'total' => 0, 'count' => 0]); exit; }
+    $items = getCartItems($user['id']);
+    echo json_encode($items, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+if ($ajaxAction === 'cart_checkout') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (!$user) { echo json_encode(['ok' => false, 'message' => L('buy_please_login')]); exit; }
+    $cartItems = getCartItems($user['id']);
+    if (empty($cartItems['items'])) { echo json_encode(['ok' => false, 'message' => '购物车为空']); exit; }
+    $totalPoints = $cartItems['total'];
+    $results = [];
+    $allSuccess = true;
+    foreach ($cartItems['items'] as $item) {
+        $modelId = intval($item['model_id']);
+        $durationType = $item['duration_type'];
+        $couponCode = $item['coupon_code'];
+        $quantity = intval($item['quantity']);
+        $elasticValues = json_decode($item['elastic_values'] ?? '{}', true) ?: [];
+        $modelStmt = $DB->prepare("SELECT * FROM vhost_models WHERE id=? AND status=1");
+        $modelStmt->execute([$modelId]);
+        $model = $modelStmt->fetch();
+        if (!$model) { $results[] = ['name' => $item['model_name'], 'ok' => false, 'message' => '型号不存在']; $allSuccess = false; continue; }
+        $months = $durationMonthsMap[$durationType] ?? 1;
+        $server = getServer($model['server_id']);
+        for ($i = 0; $i < $quantity; $i++) {
+            $account = genVhostAccount($user['id'], $modelId);
+            $password = genVhostPassword();
+            $finalWebSpace = $model['web_space']; $finalDbSpace = $model['db_space'];
+            $finalFlow = $model['flow']; $finalDomainLimit = $model['domain_limit'];
+            $elasticSurcharge = 0;
+            if ($model['is_elastic']) {
+                try {
+                    $eStmt = $DB->prepare("SELECT * FROM vhost_model_elastic WHERE model_id=? AND enabled=1");
+                    $eStmt->execute([$modelId]);
+                    $elasticRows = $eStmt->fetchAll();
+                } catch (Exception $e) {
+                    $elasticRows = [];
+                }
+                foreach ($elasticRows as $ec) {
+                    $fn = $ec['field_name'];
+                    $val = isset($elasticValues[$fn]) ? intval($elasticValues[$fn]) : intval($model[$fn]);
+                    if ($val > intval($model[$fn]) && intval($ec['step']) > 0) {
+                        $elasticSurcharge += intval(($val - intval($model[$fn])) / intval($ec['step']) * intval($ec['unit_price']));
+                    }
+                    switch ($fn) {
+                        case 'web_space': $finalWebSpace = $val; break;
+                        case 'db_space': $finalDbSpace = $val; break;
+                        case 'flow': $finalFlow = $val; break;
+                        case 'domain_limit': $finalDomainLimit = $val; break;
+                    }
+                }
+            }
+            $durDiscount = 0;
+            $dStmt = $DB->prepare("SELECT discount FROM vhost_model_durations WHERE model_id=? AND duration_type=? AND enabled=1");
+            $dStmt->execute([$modelId, $durationType]);
+            $durRow = $dStmt->fetch();
+            if ($durRow) $durDiscount = intval($durRow['discount']);
+            $basePrice = intval(ceil($model['price'] * $months * (100 - $durDiscount) / 100));
+            $itemPrice = $basePrice + $elasticSurcharge;
+            $couponId = null;
+            if (!empty($couponCode)) {
+                $cpStmt = $DB->prepare("SELECT * FROM coupons WHERE code=? AND status=0 AND (used_count < max_uses OR max_uses = 0) AND (expire_at IS NULL OR expire_at > NOW())");
+                $cpStmt->execute([$couponCode]);
+                $cp = $cpStmt->fetch();
+                if ($cp && ($cp['model_id'] === null || intval($cp['model_id']) === $modelId)) {
+                    $itemPrice = intval(ceil($itemPrice * (100 - $cp['discount']) / 100));
+                    $couponId = $cp['id'];
+                }
+            }
+            if ($user['points'] < $itemPrice) {
+                $results[] = ['name' => $item['model_name'], 'ok' => false, 'message' => L('buy_insufficient_points')];
+                $allSuccess = false; break 2;
+            }
+            $expireTime = date('Y-m-d', strtotime('+' . $months . ' months'));
+            $mnbtResult = MNBT_API::openHost($account, $password, $finalWebSpace, $finalDbSpace, $finalFlow, $finalDomainLimit, $expireTime, $server);
+            if (!$mnbtResult['success']) {
+                $results[] = ['name' => $item['model_name'], 'ok' => false, 'message' => L('buy_mnbt_fail') . '：' . $mnbtResult['message']];
+                $allSuccess = false; break 2;
+            }
+            $DB->prepare("UPDATE users SET points=points-? WHERE id=?")->execute([$itemPrice, $user['id']]);
+            $DB->prepare("INSERT INTO vhosts(user_id,model_id,account,password,mnbt_opened,expire_time,server_id,web_space,db_space,flow,domain_limit) VALUES(?,?,?,?,1,?,?,?,?,?,?)")
+                ->execute([$user['id'], $modelId, $account, $password, $expireTime, $model['server_id'], $finalWebSpace, $finalDbSpace, $finalFlow, $finalDomainLimit]);
+            if ($couponId) $DB->prepare("UPDATE coupons SET used_count=used_count+1 WHERE id=?")->execute([$couponId]);
+            $results[] = ['name' => $item['model_name'], 'ok' => true, 'message' => L('buy_success')];
+            $user = getUser();
+        }
+    }
+    if ($allSuccess) {
+        $DB->prepare("DELETE FROM cart_items WHERE user_id=?")->execute([$user['id']]);
+    }
+    echo json_encode(['ok' => $allSuccess, 'results' => $results, 'cart_count' => getCartCount($user['id'])]);
+    exit;
     }
 }
 
@@ -321,25 +489,43 @@ if ($hasCategories) {
         $defaultL2Id = intval($childrenMap[$defaultL1Id][0]['id']);
         if (isset($childrenMap[$defaultL2Id]) && !empty($childrenMap[$defaultL2Id])) {
             $defaultL3Id = intval($childrenMap[$defaultL2Id][0]['id']);
+        } else {
+            // 二级分类下没有三级时，默认用二级分类
+            $defaultL3Id = $defaultL2Id;
         }
+    } else {
+        // 一级分类下没有子分类时，默认用一级分类
+        $defaultL3Id = $defaultL1Id;
     }
 }
 
-// 初始型号列表
+// 初始型号列表：查询默认分类及其所有后代分类下的型号
 $models = [];
 if ($hasCategories && $defaultL3Id) {
-    $stmt = $DB->prepare("SELECT id, name, price, web_space, db_space, flow, domain_limit, is_elastic, category_id FROM vhost_models WHERE status=1 AND category_id=? ORDER BY sort_order, id");
-    $stmt->execute([$defaultL3Id]);
+    $defaultCatIds = [$defaultL3Id];
+    $queue = [$defaultL3Id];
+    while (!empty($queue)) {
+        $pid = array_shift($queue);
+        if (isset($childrenMap[$pid])) {
+            foreach ($childrenMap[$pid] as $c) {
+                $defaultCatIds[] = $c['id'];
+                $queue[] = $c['id'];
+            }
+        }
+    }
+    $inClause = implode(',', array_fill(0, count($defaultCatIds), '?'));
+    $stmt = $DB->prepare("SELECT id, name, price, web_space, db_space, flow, domain_limit, is_elastic, category_id FROM vhost_models WHERE status=1 AND category_id IN ({$inClause}) ORDER BY sort_order, id");
+    $stmt->execute($defaultCatIds);
     $models = $stmt->fetchAll();
 } elseif (!$hasCategories) {
     $models = $DB->query("SELECT id, name, price, web_space, db_space, flow, domain_limit, is_elastic, category_id FROM vhost_models WHERE status=1 ORDER BY sort_order,id")->fetchAll();
 }
 
-renderHeader('选购主机');
+renderHeader(L('buy_title'));
 ?>
 <!-- ========== 三级分类筛选 ========== -->
 <div class="page-header">
-    <h1>🛒 选购主机</h1>
+    <h1>🛒 <?php echo L('buy_title'); ?></h1>
     <p>选择适合您的主机方案，使用积分兑换</p>
 </div>
 
@@ -373,7 +559,7 @@ renderHeader('选购主机');
         <div class="product-name">
             <?php echo h($m['name']); ?>
             <?php if ($m['is_elastic']): ?>
-            <span class="elastic-badge">弹性配置</span>
+            <span class="elastic-badge"><?php echo L('buy_elastic'); ?></span>
             <?php endif; ?>
         </div>
         <div class="product-price"><?php echo $m['price']; ?> <span>积分/月</span></div>
@@ -394,7 +580,7 @@ renderHeader('选购主机');
     </div>
     <?php endforeach; ?>
     <?php if (empty($models)): ?>
-    <div class="empty-state" id="emptyState">暂无可购买的主机型号</div>
+    <div class="empty-state" id="emptyState"><?php echo L('buy_no_models'); ?></div>
     <?php endif; ?>
 </div>
 
@@ -403,7 +589,7 @@ renderHeader('选购主机');
 <div id="buyModal" class="buy-modal" style="display:none">
     <div class="buy-modal-content">
         <div class="buy-modal-header">
-            <h3><i class="fas fa-shopping-cart"></i> 确认购买</h3>
+            <h3><i class="fas fa-shopping-cart"></i> <?php echo L('buy_confirm'); ?></h3>
             <button type="button" class="modal-close" onclick="closeBuyModal()">&times;</button>
         </div>
         <div class="buy-modal-body">
@@ -411,61 +597,63 @@ renderHeader('选购主机');
 
             <!-- 时长选择 -->
             <div class="duration-section">
-                <label class="section-label">📅 选择时长</label>
+                <label class="section-label">📅 <?php echo L('buy_select_duration'); ?></label>
                 <div class="duration-btns" id="durationBtns"></div>
             </div>
 
             <!-- 弹性配置 -->
             <div class="elastic-section" id="elasticSection" style="display:none">
-                <label class="section-label">⚙️ 弹性配置</label>
+                <label class="section-label">⚙️ <?php echo L('buy_elastic'); ?></label>
                 <div id="elasticFields"></div>
             </div>
 
             <!-- 优惠码 -->
             <div class="coupon-section">
                 <div class="coupon-toggle" onclick="toggleCoupon()">
-                    <i class="fas fa-ticket-alt"></i> 有优惠码？
+                    <i class="fas fa-ticket-alt"></i> <?php echo L('buy_coupon'); ?>
                     <i class="fas fa-chevron-down" id="couponArrow"></i>
                 </div>
                 <div id="couponArea" class="coupon-area" style="display:none">
                     <div class="coupon-row">
-                        <input type="text" id="couponInput" placeholder="输入优惠码" maxlength="32" autocomplete="off">
-                        <button type="button" class="btn-coupon" id="couponBtn" onclick="applyCoupon()">使用</button>
+                        <input type="text" id="couponInput" placeholder="<?php echo L('buy_coupon_placeholder'); ?>" maxlength="32" autocomplete="off">
+                        <button type="button" class="btn-coupon" id="couponBtn" onclick="applyCoupon()"><?php echo L('buy_coupon_check'); ?></button>
                     </div>
                     <div id="couponMsg" class="coupon-msg"></div>
                     <div id="couponDiscountInfo" class="coupon-discount-info" style="display:none">
                         <i class="fas fa-check-circle"></i>
-                        优惠码折扣：<strong id="discountPercent">0</strong>%
-                        &nbsp;|&nbsp; 折后 <strong id="discountedPrice" style="color:var(--red)">0</strong> 积分
-                        <button type="button" class="btn-remove-coupon" onclick="removeCoupon()"><i class="fas fa-times"></i> 移除</button>
+                        <?php echo L('buy_coupon_discount'); ?>：<strong id="discountPercent">0</strong>%
+                        &nbsp;|&nbsp; <?php echo L('buy_final_price'); ?> <strong id="discountedPrice" style="color:var(--red)">0</strong> <?php echo L('buy_points'); ?>
+                        <button type="button" class="btn-remove-coupon" onclick="removeCoupon()"><i class="fas fa-times"></i> <?php echo L('cancel'); ?></button>
                     </div>
                 </div>
             </div>
 
             <!-- 价格明细 -->
             <div class="price-summary" id="priceSummary">
-                <div class="price-row"><span>时长价格</span><span id="summaryDurationPrice">0</span></div>
-                <div class="price-row" id="summaryElasticRow" style="display:none"><span>弹性加价</span><span id="summaryElasticSurcharge">0</span></div>
-                <div class="price-row" id="summaryCouponRow" style="display:none"><span>优惠码折扣</span><span id="summaryCouponDiscount" style="color:var(--green)">0</span></div>
-                <div class="price-row price-total"><span>应付总额</span><span id="summaryTotal">0</span></div>
+                <div class="price-row"><span><?php echo L('buy_base_price'); ?></span><span id="summaryDurationPrice">0</span></div>
+                <div class="price-row" id="summaryElasticRow" style="display:none"><span><?php echo L('buy_elastic_price'); ?></span><span id="summaryElasticSurcharge">0</span></div>
+                <div class="price-row" id="summaryCouponRow" style="display:none"><span><?php echo L('buy_coupon_discount'); ?></span><span id="summaryCouponDiscount" style="color:var(--green)">0</span></div>
+                <div class="price-row price-total"><span><?php echo L('buy_final_price'); ?></span><span id="summaryTotal">0</span></div>
             </div>
 
             <div class="user-balance" id="balanceInfo">
-                当前积分：<strong id="userPointsDisplay"><?php echo $loggedIn ? $user['points'] : 0; ?></strong>
+                <?php echo L('points'); ?>：<strong id="userPointsDisplay"><?php echo $loggedIn ? $user['points'] : 0; ?></strong>
                 <span id="balanceAfter" style="display:none;margin-left:8px">
                     → 剩余：<strong id="remainingPoints" style="color:var(--green)">0</strong>
                 </span>
             </div>
         </div>
         <div class="buy-modal-footer">
-            <button type="button" class="btn-cancel" onclick="closeBuyModal()">取消</button>
-            <button type="button" class="btn-confirm" id="confirmBuyBtn" onclick="confirmBuy()">确认购买</button>
+            <button type="button" class="btn-cancel" onclick="closeBuyModal()"><?php echo L('cancel'); ?></button>
+            <button type="button" class="btn-cart" id="addToCartBtn" onclick="addToCart()"><?php echo L('buy_add_cart'); ?></button>
+            <button type="button" class="btn-confirm" id="confirmBuyBtn" onclick="confirmBuy()"><?php echo L('buy_confirm'); ?></button>
         </div>
     </div>
 </div>
 
 <!-- 隐藏表单 -->
 <form id="buyForm" method="post" style="display:none">
+    <?php echo csrfField(); ?>
     <input type="hidden" name="action" value="buy_host">
     <input type="hidden" name="model_id" id="formModelId" value="">
     <input type="hidden" name="coupon_code" id="formCouponCode" value="">
@@ -780,12 +968,42 @@ renderHeader('选购主机');
 }
 .btn-confirm:hover { opacity:.88; }
 .btn-confirm:disabled { opacity:.5; cursor:not-allowed; }
+.btn-cart { padding:10px 28px; background:#fff; color:var(--primary, #6366f1); border:2px solid var(--primary, #6366f1); border-radius:10px; cursor:pointer; font-weight:600; font-size:.9rem; transition:all .2s }
+.btn-cart:hover { background:var(--primary, #6366f1); color:#fff }
 
 @keyframes fadeIn { from{opacity:0} to{opacity:1} }
 @keyframes slideUp { from{opacity:0;transform:translate(-50%,-50%) scale(.94)} to{opacity:1;transform:translate(-50%,-50%) scale(1)} }
 </style>
 
 <script>
+// ========== 多语言 ==========
+var _L = Object.assign(_L || {}, {
+    buyNoModels: <?php echo json_encode(L('buy_no_models'), JSON_UNESCAPED_UNICODE); ?>,
+    buyLoadFail: <?php echo json_encode(L('buy_load_fail'), JSON_UNESCAPED_UNICODE); ?>,
+    buyElastic: <?php echo json_encode(L('buy_elastic'), JSON_UNESCAPED_UNICODE); ?>,
+    buySelectDuration: <?php echo json_encode(L('buy_select_duration'), JSON_UNESCAPED_UNICODE); ?>,
+    buyInsufficient: <?php echo json_encode(L('buy_insufficient_points'), JSON_UNESCAPED_UNICODE); ?>,
+    buyBtn: <?php echo json_encode(L('buy_confirm'), JSON_UNESCAPED_UNICODE); ?>,
+    buyAddCart: <?php echo json_encode(L('cart_added'), JSON_UNESCAPED_UNICODE); ?>,
+    buyPoints: <?php echo json_encode(L('buy_points'), JSON_UNESCAPED_UNICODE); ?>,
+    buyMonth: <?php echo json_encode(L('buy_month'), JSON_UNESCAPED_UNICODE); ?>,
+    buyQuarter: <?php echo json_encode(L('buy_quarter'), JSON_UNESCAPED_UNICODE); ?>,
+    buyHalfYear: <?php echo json_encode(L('buy_half_year'), JSON_UNESCAPED_UNICODE); ?>,
+    buyYear: <?php echo json_encode(L('buy_year'), JSON_UNESCAPED_UNICODE); ?>,
+    buy2year: <?php echo json_encode(L('buy_2year'), JSON_UNESCAPED_UNICODE); ?>,
+    buy3year: <?php echo json_encode(L('buy_3year'), JSON_UNESCAPED_UNICODE); ?>,
+    buy5year: <?php echo json_encode(L('buy_5year'), JSON_UNESCAPED_UNICODE); ?>,
+    buy10year: <?php echo json_encode(L('buy_10year'), JSON_UNESCAPED_UNICODE); ?>,
+    couponInvalid: <?php echo json_encode(L('coupon_invalid'), JSON_UNESCAPED_UNICODE); ?>,
+    couponPlaceholder: <?php echo json_encode(L('coupon_placeholder'), JSON_UNESCAPED_UNICODE); ?>,
+    couponValidating: <?php echo json_encode(L('coupon_validating'), JSON_UNESCAPED_UNICODE); ?>,
+    couponVerifyFail: <?php echo json_encode(L('coupon_verify_fail'), JSON_UNESCAPED_UNICODE); ?>,
+    buySuccess: <?php echo json_encode(L('buy_success'), JSON_UNESCAPED_UNICODE); ?>,
+    buyMnbtFail: <?php echo json_encode(L('buy_mnbt_fail'), JSON_UNESCAPED_UNICODE); ?>,
+    buyPleaseLogin: <?php echo json_encode(L('buy_please_login'), JSON_UNESCAPED_UNICODE); ?>,
+    buyModelNotFound: <?php echo json_encode(L('buy_model_not_found'), JSON_UNESCAPED_UNICODE); ?>
+});
+
 // ========== 全局数据 ==========
 var userPoints = <?php echo $loggedIn ? $user['points'] : 0; ?>;
 var allCategories = <?php echo json_encode($allCats, JSON_UNESCAPED_UNICODE); ?>;
@@ -797,9 +1015,8 @@ var defaultL3Id = <?php echo $defaultL3Id; ?>;
 var hasCategories = <?php echo $hasCategories ? 'true' : 'false'; ?>;
 
 var durationLabels = {
-    'month': '1个月', 'quarter': '3个月', 'half_year': '半年',
-    'year': '1年', '2year': '2年', '3year': '3年',
-    '5year': '5年', '10year': '10年'
+    'month': _L.buyMonth, 'quarter': _L.buyQuarter, 'half_year': _L.buyHalfYear,
+    'year': _L.buyYear, '2year': _L.buy2year, '3year': _L.buy3year, '5year': _L.buy5year, '10year': _L.buy10year
 };
 var durationMonths = {
     'month': 1, 'quarter': 3, 'half_year': 6,
@@ -825,6 +1042,12 @@ var currentSubtotal = 0;
 var currentCouponDiscount = 0;
 var appliedCouponCode = '';
 var currentFinalPrice = 0;
+
+// ========== CSRF 辅助 ==========
+function _csrfParam() {
+    var t = document.querySelector('meta[name="csrf-token"]');
+    return t ? '&_csrf=' + encodeURIComponent(t.getAttribute('content')) : '';
+}
 
 // ========== 格式化函数 ==========
 function formatBytes(mb) {
@@ -906,7 +1129,7 @@ function initCategories() {
 function loadModels(categoryId) {
     var grid = document.getElementById('productGrid');
     if (!categoryId) {
-        grid.innerHTML = '<div class="empty-state">暂无可购买的主机型号</div>';
+        grid.innerHTML = '<div class="empty-state">' + _L.buyNoModels + '</div>';
         return;
     }
 
@@ -923,20 +1146,20 @@ function loadModels(categoryId) {
                     return renderProductCard(m);
                 }).join('');
             } else {
-                grid.innerHTML = '<div class="empty-state">暂无可购买的主机型号</div>';
+                grid.innerHTML = '<div class="empty-state">' + _L.buyNoModels + '</div>';
             }
         } catch(e) {
-            grid.innerHTML = '<div class="empty-state">加载失败，请重试</div>';
+            grid.innerHTML = '<div class="empty-state">' + _L.buyLoadFail + '</div>';
         }
     };
-    xhr.send('action=get_models&category_id=' + categoryId);
+    xhr.send('action=get_models&category_id=' + categoryId + _csrfParam());
 }
 
 function renderProductCard(m) {
     var html = '<div class="product-card" data-model-id="' + m.id + '">';
     html += '<div class="product-name">' + escHtml(m.name);
     if (m.is_elastic == 1) {
-        html += ' <span class="elastic-badge">弹性配置</span>';
+        html += ' <span class="elastic-badge"><?php echo L('buy_elastic'); ?></span>';
     }
     html += '</div>';
     html += '<div class="product-price">' + m.price + ' <span>积分/月</span></div>';
@@ -973,7 +1196,7 @@ function renderProductCard(m) {
     var loggedIn = <?php echo $loggedIn ? 'true' : 'false'; ?>;
     if (loggedIn) {
         var disabled = userPoints < m.price ? ' disabled' : '';
-        var label = userPoints < m.price ? '积分不足' : '立即购买';
+        var label = userPoints < m.price ? _L.buyInsufficient : _L.buyBtn;
         html += '<button type="button" class="btn-primary" style="width:100%"' + disabled + ' onclick="openBuyModal(' + m.id + ')">' + label + '</button>';
     } else {
         html += '<a href="login.php" class="btn-primary" style="width:100%;display:block;text-align:center">登录后购买</a>';
@@ -1023,7 +1246,7 @@ function openBuyModal(modelId) {
             closeBuyModal();
         }
     };
-    xhr.send('action=get_model_data&model_id=' + modelId);
+    xhr.send('action=get_model_data&model_id=' + modelId + _csrfParam());
 }
 
 function resetModalState() {
@@ -1280,7 +1503,7 @@ function applyCoupon() {
             msg.textContent = '验证失败，请重试'; msg.className = 'coupon-msg error';
         }
     };
-    var params = 'action=check_coupon&code=' + encodeURIComponent(code) + '&model_id=' + currentModelId + '&duration_type=' + encodeURIComponent(currentDurationType) + '&elastic_values=' + encodeURIComponent(elasticJson);
+    var params = 'action=check_coupon&code=' + encodeURIComponent(code) + '&model_id=' + currentModelId + '&duration_type=' + encodeURIComponent(currentDurationType) + '&elastic_values=' + encodeURIComponent(elasticJson) + _csrfParam();
     xhr.send(params);
 }
 
@@ -1297,7 +1520,7 @@ function removeCoupon() {
 // ========== 确认购买 ==========
 function confirmBuy() {
     if (!currentDurationType) {
-        alert('请选择购买时长');
+        alert(_L.buySelectDuration);
         return;
     }
     document.getElementById('formModelId').value = currentModelId;
@@ -1305,7 +1528,29 @@ function confirmBuy() {
     document.getElementById('formDurationType').value = currentDurationType;
     document.getElementById('formElasticValues').value = JSON.stringify(currentElasticValues);
     document.getElementById('confirmBuyBtn').disabled = true;
+    if (typeof showLoading === 'function') showLoading();
     document.getElementById('buyForm').submit();
+}
+
+// ========== 购物车 ==========
+function addToCart() {
+    if (!currentDurationType) { alert(_L.buySelectDuration); return; }
+    var fd = new FormData();
+    fd.append('action', 'add_to_cart');
+    fd.append('model_id', currentModelId);
+    fd.append('duration_type', currentDurationType);
+    fd.append('elastic_values', JSON.stringify(currentElasticValues));
+    fd.append('coupon_code', appliedCouponCode);
+    fetch('', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (res.ok) {
+                alert(_L.buyAddCart);
+                updateCartBadge(res.cart_count);
+            } else {
+                alert(res.message);
+            }
+        });
 }
 
 // ========== 初始化 ==========

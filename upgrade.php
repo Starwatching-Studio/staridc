@@ -15,34 +15,23 @@ if (!file_exists(ROOT . 'config.php')) {
     die('未检测到系统安装，请先运行 <a href="install/">安装向导</a>');
 }
 
-require ROOT . 'config.php';
+require ROOT . 'rd/bootstrap.php';
 
 $error = '';
 $success = '';
 $logs = [];
 $authorized = false;
 
-// 验证管理员身份（简单密码验证，避免被滥用）
-session_start();
+// 验证管理员身份（与后台登录逻辑一致，仅需密码）
 if (!empty($_POST['admin_password'])) {
-    try {
-        $dsn = 'mysql:host=' . $dbconfig['host'] . ';port=' . $dbconfig['port'] . ';dbname=' . $dbconfig['dbname'] . ';charset=utf8mb4';
-        $pdo = new PDO($dsn, $dbconfig['user'], $dbconfig['pwd'], [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ]);
-
-        $stmt = $pdo->prepare("SELECT password FROM admins WHERE username = ?");
-        $stmt->execute(['admin']);
-        $admin = $stmt->fetch();
-
-        if ($admin && password_verify($_POST['admin_password'], $admin['password'])) {
-            $authorized = true;
-        } else {
-            $error = '管理员密码错误';
-        }
-    } catch (Exception $e) {
-        $error = '数据库连接失败：' . $e->getMessage();
+    $password = $_POST['admin_password'];
+    $stmt = $DB->prepare("SELECT password FROM admins LIMIT 1");
+    $stmt->execute();
+    $admin = $stmt->fetch();
+    if ($admin && password_verify($password, $admin['password'])) {
+        $authorized = true;
+    } else {
+        $error = '管理员密码错误';
     }
 }
 
@@ -58,7 +47,7 @@ if ($authorized) {
             'remember_token' => 'VARCHAR(64) NULL',
         ];
 
-        $stmt = $pdo->query("SHOW COLUMNS FROM users");
+        $stmt = $DB->query("SHOW COLUMNS FROM users");
         $existing = [];
         while ($row = $stmt->fetch()) {
             $existing[] = $row['Field'];
@@ -66,7 +55,7 @@ if ($authorized) {
 
         foreach ($columns as $col => $def) {
             if (!in_array($col, $existing)) {
-                $pdo->exec("ALTER TABLE users ADD COLUMN {$col} {$def}");
+                $DB->exec("ALTER TABLE users ADD COLUMN {$col} {$def}");
                 $logs[] = "✅ users 表已添加字段：{$col}";
             } else {
                 $logs[] = "⏭️ users 表字段已存在：{$col}";
@@ -74,14 +63,14 @@ if ($authorized) {
         }
 
         // === 2. 创建缺失的表 ===
-        $stmt = $pdo->query("SHOW TABLES");
+        $stmt = $DB->query("SHOW TABLES");
         $tables = [];
         while ($row = $stmt->fetch(PDO::FETCH_NUM)) {
             $tables[] = $row[0];
         }
 
         if (!in_array('referral_logs', $tables)) {
-            $pdo->exec("CREATE TABLE referral_logs (
+            $DB->exec("CREATE TABLE referral_logs (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 referrer_id INT NOT NULL,
                 referred_id INT NOT NULL,
@@ -96,7 +85,7 @@ if ($authorized) {
         }
 
         if (!in_array('coupons', $tables)) {
-            $pdo->exec("CREATE TABLE coupons (
+            $DB->exec("CREATE TABLE coupons (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 code VARCHAR(32) NOT NULL UNIQUE,
                 discount INT NOT NULL DEFAULT 0,
@@ -119,13 +108,13 @@ if ($authorized) {
             'register_points'         => '100',
         ];
 
-        $stmt = $pdo->query("SELECT k FROM config");
+        $stmt = $DB->query("SELECT k FROM config");
         $configKeys = [];
         while ($row = $stmt->fetch()) {
             $configKeys[] = $row['k'];
         }
 
-        $insertStmt = $pdo->prepare("INSERT IGNORE INTO config(k,v) VALUES(?,?)");
+        $insertStmt = $DB->prepare("INSERT IGNORE INTO config(k,v) VALUES(?,?)");
         foreach ($missingConfigs as $key => $val) {
             if (!in_array($key, $configKeys)) {
                 $insertStmt->execute([$key, $val]);
@@ -137,7 +126,7 @@ if ($authorized) {
 
         // === 4. 多MNBT服务器支持：创建 mnbt_servers 表 ===
         if (!in_array('mnbt_servers', $tables)) {
-            $pdo->exec("CREATE TABLE mnbt_servers (
+            $DB->exec("CREATE TABLE mnbt_servers (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
                 api_url VARCHAR(255) NOT NULL,
@@ -155,33 +144,33 @@ if ($authorized) {
         }
 
         // === 5. vhost_models 表添加 server_id 字段 ===
-        $stmt = $pdo->query("SHOW COLUMNS FROM vhost_models");
+        $stmt = $DB->query("SHOW COLUMNS FROM vhost_models");
         $vmCols = [];
         while ($row = $stmt->fetch()) {
             $vmCols[] = $row['Field'];
         }
         if (!in_array('server_id', $vmCols)) {
-            $pdo->exec("ALTER TABLE vhost_models ADD COLUMN server_id INT NULL DEFAULT NULL");
+            $DB->exec("ALTER TABLE vhost_models ADD COLUMN server_id INT NULL DEFAULT NULL");
             $logs[] = "✅ vhost_models 表已添加字段：server_id";
         } else {
             $logs[] = "⏭️ vhost_models 表字段已存在：server_id";
         }
 
         // === 6. vhosts 表添加 server_id 字段 ===
-        $stmt = $pdo->query("SHOW COLUMNS FROM vhosts");
+        $stmt = $DB->query("SHOW COLUMNS FROM vhosts");
         $vhCols = [];
         while ($row = $stmt->fetch()) {
             $vhCols[] = $row['Field'];
         }
         if (!in_array('server_id', $vhCols)) {
-            $pdo->exec("ALTER TABLE vhosts ADD COLUMN server_id INT NULL DEFAULT NULL");
+            $DB->exec("ALTER TABLE vhosts ADD COLUMN server_id INT NULL DEFAULT NULL");
             $logs[] = "✅ vhosts 表已添加字段：server_id";
         } else {
             $logs[] = "⏭️ vhosts 表字段已存在：server_id";
         }
 
         // === 7. coupons 表添加新字段（有效期、使用次数、适用型号） ===
-        $stmt = $pdo->query("SHOW COLUMNS FROM coupons");
+        $stmt = $DB->query("SHOW COLUMNS FROM coupons");
         $cpCols = [];
         while ($row = $stmt->fetch()) {
             $cpCols[] = $row['Field'];
@@ -194,7 +183,7 @@ if ($authorized) {
         ];
         foreach ($couponNewCols as $col => $def) {
             if (!in_array($col, $cpCols)) {
-                $pdo->exec("ALTER TABLE coupons ADD COLUMN {$col} {$def}");
+                $DB->exec("ALTER TABLE coupons ADD COLUMN {$col} {$def}");
                 $logs[] = "✅ coupons 表已添加字段：{$col}";
             } else {
                 $logs[] = "⏭️ coupons 表字段已存在：{$col}";
@@ -205,7 +194,7 @@ if ($authorized) {
 
         // === 8. 创建工单表 ===
         if (!in_array('tickets', $tables)) {
-            $pdo->exec("CREATE TABLE tickets (
+            $DB->exec("CREATE TABLE tickets (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT NOT NULL,
                 vhost_id INT NULL,
@@ -226,9 +215,9 @@ if ($authorized) {
             ];
             foreach ($missingCols as $col => $def) {
                 try {
-                    $cols = $pdo->query("SHOW COLUMNS FROM tickets LIKE '{$col}'")->fetchAll();
+                    $cols = $DB->query("SHOW COLUMNS FROM tickets LIKE '{$col}'")->fetchAll();
                     if (empty($cols)) {
-                        $pdo->exec("ALTER TABLE tickets ADD COLUMN {$col} {$def}");
+                        $DB->exec("ALTER TABLE tickets ADD COLUMN {$col} {$def}");
                         $logs[] = "✅ 已添加列：tickets.{$col}";
                     }
                 } catch (Exception $e) {
@@ -238,7 +227,7 @@ if ($authorized) {
         }
 
         if (!in_array('ticket_replies', $tables)) {
-            $pdo->exec("CREATE TABLE ticket_replies (
+            $DB->exec("CREATE TABLE ticket_replies (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 ticket_id INT NOT NULL,
                 user_id INT NULL,
@@ -256,9 +245,9 @@ if ($authorized) {
             ];
             foreach ($replyMissingCols as $col => $def) {
                 try {
-                    $cols = $pdo->query("SHOW COLUMNS FROM ticket_replies LIKE '{$col}'")->fetchAll();
+                    $cols = $DB->query("SHOW COLUMNS FROM ticket_replies LIKE '{$col}'")->fetchAll();
                     if (empty($cols)) {
-                        $pdo->exec("ALTER TABLE ticket_replies ADD COLUMN {$col} {$def}");
+                        $DB->exec("ALTER TABLE ticket_replies ADD COLUMN {$col} {$def}");
                         $logs[] = "✅ 已添加列：ticket_replies.{$col}";
                     }
                 } catch (Exception $e) {
@@ -271,7 +260,7 @@ if ($authorized) {
         $ticketConfigs = [
             'mail_notify_ticket' => '1',
         ];
-        $insertTicketStmt = $pdo->prepare("INSERT IGNORE INTO config(k,v) VALUES(?,?)");
+        $insertTicketStmt = $DB->prepare("INSERT IGNORE INTO config(k,v) VALUES(?,?)");
         foreach ($ticketConfigs as $key => $val) {
             if (!in_array($key, $configKeys)) {
                 $insertTicketStmt->execute([$key, $val]);
@@ -283,10 +272,10 @@ if ($authorized) {
 
         // === 10. 补充版本更新配置项 ===
         $updateConfigs = [
-            'current_version' => '1.3.0',
+            'current_version' => '1.4.9',
             'update_api_url' => 'https://staridc.fangqihang.cn/api.php',
         ];
-        $upsertStmt = $pdo->prepare("INSERT INTO config(k,v) VALUES(?,?) ON DUPLICATE KEY UPDATE v=VALUES(v)");
+        $upsertStmt = $DB->prepare("INSERT INTO config(k,v) VALUES(?,?) ON DUPLICATE KEY UPDATE v=VALUES(v)");
         foreach ($updateConfigs as $key => $val) {
             if (!in_array($key, $configKeys)) {
                 $upsertStmt->execute([$key, $val]);
@@ -299,7 +288,7 @@ if ($authorized) {
 
         // === 11. 创建充值套餐表 ===
         if (!in_array('recharge_packages', $tables)) {
-            $pdo->exec("CREATE TABLE recharge_packages (
+            $DB->exec("CREATE TABLE recharge_packages (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 points INT NOT NULL DEFAULT 0,
                 price DECIMAL(10,2) NOT NULL DEFAULT 0,
@@ -313,9 +302,9 @@ if ($authorized) {
         }
 
         // === 12. vhost_models 表添加 max_per_user 字段 ===
-        $vmCols = $pdo->query("SHOW COLUMNS FROM vhost_models")->fetchAll(PDO::FETCH_COLUMN);
+        $vmCols = $DB->query("SHOW COLUMNS FROM vhost_models")->fetchAll(PDO::FETCH_COLUMN);
         if (!in_array('max_per_user', $vmCols)) {
-            $pdo->exec("ALTER TABLE vhost_models ADD COLUMN max_per_user INT NOT NULL DEFAULT 0");
+            $DB->exec("ALTER TABLE vhost_models ADD COLUMN max_per_user INT NOT NULL DEFAULT 0");
             $logs[] = "✅ 已添加字段：vhost_models.max_per_user";
         } else {
             $logs[] = "⏭️ 字段已存在：vhost_models.max_per_user";
@@ -325,7 +314,7 @@ if ($authorized) {
         $limitConfigs = [
             'max_hosts_per_user' => '5',
         ];
-        $insertLimitStmt = $pdo->prepare("INSERT IGNORE INTO config(k,v) VALUES(?,?)");
+        $insertLimitStmt = $DB->prepare("INSERT IGNORE INTO config(k,v) VALUES(?,?)");
         foreach ($limitConfigs as $key => $val) {
             if (!in_array($key, $configKeys)) {
                 $insertLimitStmt->execute([$key, $val]);
@@ -337,7 +326,7 @@ if ($authorized) {
 
         // === 14. 创建OAuth聚合登录绑定表 ===
         if (!in_array('oauth_bindings', $tables)) {
-            $pdo->exec("CREATE TABLE oauth_bindings (
+            $DB->exec("CREATE TABLE oauth_bindings (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT NOT NULL,
                 oauth_type VARCHAR(20) NOT NULL,
@@ -366,7 +355,7 @@ if ($authorized) {
             'oauth_icon_img_feishu' => '',
             'oauth_icon_text_feishu' => '飞',
         ];
-        $insertOauthStmt = $pdo->prepare("INSERT IGNORE INTO config(k,v) VALUES(?,?)");
+        $insertOauthStmt = $DB->prepare("INSERT IGNORE INTO config(k,v) VALUES(?,?)");
         foreach ($oauthConfigs as $key => $val) {
             if (!in_array($key, $configKeys)) {
                 $insertOauthStmt->execute([$key, $val]);
@@ -381,10 +370,10 @@ if ($authorized) {
             'category_id' => 'INT NULL AFTER max_per_user',
             'is_elastic'  => 'TINYINT NOT NULL DEFAULT 0 AFTER category_id',
         ];
-        $modelCols = array_column($pdo->query("SHOW COLUMNS FROM vhost_models")->fetchAll(), 'Field');
+        $modelCols = array_column($DB->query("SHOW COLUMNS FROM vhost_models")->fetchAll(), 'Field');
         foreach ($modelNewCols as $col => $def) {
             if (!in_array($col, $modelCols)) {
-                $pdo->exec("ALTER TABLE vhost_models ADD COLUMN {$col} {$def}");
+                $DB->exec("ALTER TABLE vhost_models ADD COLUMN {$col} {$def}");
                 $logs[] = "✅ vhost_models 已添加字段：{$col}";
             } else {
                 $logs[] = "⏭️ vhost_models 字段已存在：{$col}";
@@ -393,7 +382,7 @@ if ($authorized) {
 
         // === 17. 创建三级分类表 ===
         if (!in_array('vhost_categories', $tables)) {
-            $pdo->exec("CREATE TABLE vhost_categories (
+            $DB->exec("CREATE TABLE vhost_categories (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(50) NOT NULL,
                 parent_id INT NULL,
@@ -402,36 +391,29 @@ if ($authorized) {
                 FOREIGN KEY (parent_id) REFERENCES vhost_categories(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
             $logs[] = "✅ 已创建表：vhost_categories";
-            $pdo->exec("INSERT INTO vhost_categories(name,parent_id,level,sort_order) VALUES('未分类',NULL,1,0)");
-            $catId1 = $pdo->lastInsertId();
-            $pdo->exec("INSERT INTO vhost_categories(name,parent_id,level,sort_order) VALUES('未分类',{$catId1},2,0)");
-            $catId2 = $pdo->lastInsertId();
-            $pdo->exec("INSERT INTO vhost_categories(name,parent_id,level,sort_order) VALUES('未分类',{$catId2},3,0)");
-            $catId3 = $pdo->lastInsertId();
-            $pdo->exec("UPDATE vhost_models SET category_id={$catId3} WHERE category_id IS NULL");
-            $logs[] = "✅ 已添加默认分类，旧型号已归入";
+            // 默认不添加任何分类，由管理员自行创建
         } else {
             $logs[] = "⏭️ 表已存在：vhost_categories";
             // 补充 level 列（旧版可能没有）
             try {
-                $cols = $pdo->query("SHOW COLUMNS FROM vhost_categories LIKE 'level'")->fetchAll();
+                $cols = $DB->query("SHOW COLUMNS FROM vhost_categories LIKE 'level'")->fetchAll();
                 if (empty($cols)) {
-                    $pdo->exec("ALTER TABLE vhost_categories ADD COLUMN level TINYINT NOT NULL DEFAULT 1 AFTER parent_id");
+                    $DB->exec("ALTER TABLE vhost_categories ADD COLUMN level TINYINT NOT NULL DEFAULT 1 AFTER parent_id");
                     $logs[] = "✅ 已添加列：vhost_categories.level";
                     // 自动计算level
-                    $allCats = $pdo->query("SELECT id, parent_id FROM vhost_categories")->fetchAll();
+                    $allCats = $DB->query("SELECT id, parent_id FROM vhost_categories")->fetchAll();
                     foreach ($allCats as $c) {
                         if (empty($c['parent_id'])) {
-                            $pdo->exec("UPDATE vhost_categories SET level=1 WHERE id={$c['id']}");
+                            $DB->exec("UPDATE vhost_categories SET level=1 WHERE id={$c['id']}");
                         }
                     }
                     foreach ($allCats as $c) {
                         if (!empty($c['parent_id'])) {
-                            $pStmt = $pdo->prepare("SELECT level FROM vhost_categories WHERE id=?");
+                            $pStmt = $DB->prepare("SELECT level FROM vhost_categories WHERE id=?");
                             $pStmt->execute([$c['parent_id']]);
                             $p = $pStmt->fetch();
                             if ($p) {
-                                $pdo->exec("UPDATE vhost_categories SET level=".($p['level']+1)." WHERE id={$c['id']}");
+                                $DB->exec("UPDATE vhost_categories SET level=".($p['level']+1)." WHERE id={$c['id']}");
                             }
                         }
                     }
@@ -443,7 +425,7 @@ if ($authorized) {
 
         // === 18. 创建时长折扣表 ===
         if (!in_array('vhost_model_durations', $tables)) {
-            $pdo->exec("CREATE TABLE vhost_model_durations (
+            $DB->exec("CREATE TABLE vhost_model_durations (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 model_id INT NOT NULL,
                 duration_type VARCHAR(20) NOT NULL,
@@ -453,8 +435,8 @@ if ($authorized) {
                 UNIQUE KEY uk_model_dur (model_id, duration_type)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
             $logs[] = "✅ 已创建表：vhost_model_durations";
-            $models = $pdo->query("SELECT id FROM vhost_models")->fetchAll();
-            $durStmt = $pdo->prepare("INSERT IGNORE INTO vhost_model_durations(model_id,duration_type,discount,enabled) VALUES(?,'month',0,1)");
+            $models = $DB->query("SELECT id FROM vhost_models")->fetchAll();
+            $durStmt = $DB->prepare("INSERT IGNORE INTO vhost_model_durations(model_id,duration_type,discount,enabled) VALUES(?,'month',0,1)");
             foreach ($models as $m) { $durStmt->execute([$m['id']]); }
             $logs[] = "✅ 旧型号已设置默认月付";
         } else {
@@ -463,7 +445,7 @@ if ($authorized) {
 
         // === 19. 创建弹性配置表 ===
         if (!in_array('vhost_model_elastic', $tables)) {
-            $pdo->exec("CREATE TABLE vhost_model_elastic (
+            $DB->exec("CREATE TABLE vhost_model_elastic (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 model_id INT NOT NULL,
                 field_name VARCHAR(20) NOT NULL,
@@ -479,6 +461,51 @@ if ($authorized) {
         } else {
             $logs[] = "⏭️ 表已存在：vhost_model_elastic";
         }
+
+        // === 20. vhosts 表添加弹性配置字段 ===
+        $vhostsNewCols = [
+            'web_space'    => 'INT NULL DEFAULT NULL',
+            'db_space'     => 'INT NULL DEFAULT NULL',
+            'flow'         => 'INT NULL DEFAULT NULL',
+            'domain_limit' => 'INT NULL DEFAULT NULL',
+        ];
+        $vhostsCols = array_column($DB->query("SHOW COLUMNS FROM vhosts")->fetchAll(), 'Field');
+        foreach ($vhostsNewCols as $col => $def) {
+            if (!in_array($col, $vhostsCols)) {
+                $DB->exec("ALTER TABLE vhosts ADD COLUMN {$col} {$def}");
+                $logs[] = "✅ vhosts 已添加字段：{$col}";
+            } else {
+                $logs[] = "⏭️ vhosts 字段已存在：{$col}";
+            }
+        }
+
+        // === 21. 创建购物车表 ===
+        $DB->exec("CREATE TABLE IF NOT EXISTS cart_items (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            model_id INT NOT NULL,
+            duration_type VARCHAR(20) NOT NULL DEFAULT 'month',
+            elastic_values TEXT NULL,
+            coupon_code VARCHAR(50) NULL,
+            quantity INT NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (model_id) REFERENCES vhost_models(id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $logs[] = "✅ 购物车表 cart_items 已创建";
+
+        // === 22. 创建 API Key 表 ===
+        $DB->exec("CREATE TABLE IF NOT EXISTS api_keys (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            api_key VARCHAR(64) NOT NULL UNIQUE,
+            name VARCHAR(50) NOT NULL DEFAULT '',
+            status TINYINT NOT NULL DEFAULT 1,
+            last_used_at DATETIME NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $logs[] = "✅ API Key 表 api_keys 已创建";
 
         $success = '数据库升级完成！共执行 ' . count($logs) . ' 项操作。';
     } catch (Exception $e) {
@@ -535,6 +562,7 @@ body{min-height:100vh;display:flex;align-items:center;justify-content:center;bac
     </div>
 <?php elseif (!$authorized): ?>
     <form method="post">
+        <?php echo csrfField(); ?>
         <div class="form-group">
             <label>管理员密码</label>
             <input type="password" name="admin_password" placeholder="请输入管理员密码验证身份" required>

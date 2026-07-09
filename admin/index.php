@@ -10,7 +10,7 @@ include ROOT . 'rd/MNBT_API.php';
  */
 function checkUpdate() {
     $apiUrl = trim(conf('update_api_url', ''));
-    $currentVersion = trim(conf('current_version', '1.2.0'));
+    $currentVersion = trim(conf('current_version', '1.4.9'));
     if ($apiUrl === '' || $currentVersion === '') {
         return null;
     }
@@ -81,21 +81,21 @@ if (file_exists(ROOT . 'config.php')) {
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;padding:20px}
+body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#10b981 0%,#059669 100%);font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;padding:20px}
 .login-box{background:rgba(255,255,255,0.95);backdrop-filter:blur(20px);border-radius:24px;padding:48px 40px;max-width:420px;width:100%;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25)}
 .login-box h1{text-align:center;color:#1a1a2e;margin-bottom:8px;font-size:1.8rem;font-weight:700}
 .login-box .subtitle{text-align:center;color:#6b7280;margin-bottom:32px;font-size:.9rem}
 .input-group{position:relative;margin-bottom:20px}
 .input-group label{display:block;margin-bottom:8px;font-weight:600;color:#374151;font-size:.9rem}
 .input-group input{width:100%;padding:14px 16px 14px 44px;border:2px solid #e5e7eb;border-radius:12px;font-size:1rem;transition:all .3s;background:#f9fafb}
-.input-group input:focus{border-color:#667eea;outline:none;background:#fff;box-shadow:0 0 0 4px rgba(102,126,234,0.1)}
+.input-group input:focus{border-color:#10b981;outline:none;background:#fff;box-shadow:0 0 0 4px rgba(16,185,129,0.1)}
 .input-group i{position:absolute;left:16px;bottom:14px;color:#9ca3af;font-size:1.1rem}
-.btn{width:100%;padding:16px;border:none;border-radius:12px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;font-size:1rem;font-weight:600;cursor:pointer;transition:all .3s;box-shadow:0 4px 15px rgba(102,126,234,0.4)}
-.btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(102,126,234,0.5)}
+.btn{width:100%;padding:16px;border:none;border-radius:12px;background:linear-gradient(135deg,#10b981 0%,#059669 100%);color:#fff;font-size:1rem;font-weight:600;cursor:pointer;transition:all .3s;box-shadow:0 4px 15px rgba(16,185,129,0.4)}
+.btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(16,185,129,0.5)}
 .btn:active{transform:translateY(0)}
 .err{background:#fef2f2;color:#dc2626;padding:12px 16px;border-radius:10px;margin-bottom:16px;font-size:.9rem;text-align:center;border:1px solid #fecaca}
 .logo{text-align:center;margin-bottom:24px}
-.logo i{font-size:3rem;background:linear-gradient(135deg,#667eea,#764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:4rem}
+.logo i{font-size:3rem;background:linear-gradient(135deg,#10b981,#059669);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:4rem}
 </style>
 </head>
 <body>
@@ -105,6 +105,7 @@ body{min-height:100vh;display:flex;align-items:center;justify-content:center;bac
 <p class="subtitle">云虚拟主机分销平台</p>
 <?php if(!empty($loginError)) echo '<div class="err"><i class="fas fa-exclamation-circle"></i> '.$loginError.'</div>';?>
 <form method="post">
+<?php echo csrfField(); ?>
 <input type="hidden" name="admin_login" value="1">
 <div class="input-group">
 <label>管理员账号</label>
@@ -129,6 +130,27 @@ body{min-height:100vh;display:flex;align-items:center;justify-content:center;bac
 }
 
 $page = $_GET['page'] ?? 'dashboard';
+
+// 旧版URL兼容：旧页面名自动重定向到新页面
+$legacyPages = [
+    'servers' => 'config',
+    'vhost_categories' => 'product',
+    'vhost_models' => 'product',
+    'statistics' => 'dashboard',
+    'recharge_packages' => 'pricing',
+    'coupons' => 'promotions',
+    'prices' => 'promotions'
+];
+if (isset($legacyPages[$page])) {
+    $redirectPage = $legacyPages[$page];
+    if ($redirectPage === 'promotions') {
+        header('Location: ?page=pricing&sub=promotions');
+    } else {
+        header('Location: ?page=' . $redirectPage);
+    }
+    exit;
+}
+
 $msg = '';
 $msgType = '';
 
@@ -140,10 +162,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'pay_api_url','pay_pid','pay_key',
                 'mail_host','mail_port','mail_user','mail_pass','mail_name','mail_security','mail_enabled',
                 'email_domain_restrict_enabled','email_domain_whitelist',
+                'admin_email','admin_email_notify',
                 'sign_min','sign_max','theme','announcement',
                 'register_points_enabled','register_points',
                 'referral_enabled','referral_reward_points',
-                'mail_notify_ticket','current_version','update_api_url','max_hosts_per_user',
+                'mail_notify_ticket','mail_notify_host','mail_notify_points','mail_notify_expire',
+                'cron_key','current_version','update_api_url','max_hosts_per_user',
                 'oauth_enabled','oauth_api_url','oauth_appid','oauth_appkey','oauth_types',
                 'oauth_icon_img_dingtalk','oauth_icon_text_dingtalk','oauth_icon_img_feishu','oauth_icon_text_feishu'];
             foreach ($fields as $f) {
@@ -179,13 +203,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $DB->prepare("INSERT INTO vhost_models(name,web_space,db_space,flow,domain_limit,price,sort_order,server_id,max_per_user,category_id,is_elastic) VALUES(?,?,?,?,?,?,?,?,?,?,?)");
             $stmt->execute([$_POST['name'],intval($_POST['web_space']),intval($_POST['db_space']),intval($_POST['flow']),intval($_POST['domain_limit']),intval($_POST['price']),intval($_POST['sort_order']),$serverId,$maxPerUser,$categoryId,$isElastic]);
             $modelId = $DB->lastInsertId();
-            // 保存时长折扣
+            // 保存时长折扣（若用户未勾选任何时长，默认启用月付以避免无法购买）
             $DB->prepare("DELETE FROM vhost_model_durations WHERE model_id=?")->execute([$modelId]);
             $durs = $_POST['dur'] ?? [];
+            $hasEnabled = false;
             foreach(['month','quarter','half_year','year','2year','3year','5year','10year'] as $dk) {
                 $enabled = isset($durs[$dk]['enabled']) ? 1 : 0;
+                if ($enabled) $hasEnabled = true;
                 $discount = intval($durs[$dk]['discount'] ?? 0);
                 $DB->prepare("INSERT INTO vhost_model_durations(model_id,duration_type,enabled,discount) VALUES(?,?,?,?)")->execute([$modelId, $dk, $enabled, $discount]);
+            }
+            if (!$hasEnabled) {
+                $DB->prepare("UPDATE vhost_model_durations SET enabled=1, discount=0 WHERE model_id=? AND duration_type='month'")->execute([$modelId]);
             }
             // 保存弹性配置
             $DB->prepare("DELETE FROM vhost_model_elastic WHERE model_id=?")->execute([$modelId]);
@@ -243,9 +272,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($chk->fetch()['c'] > 0) {
                 $msg = '该型号下还有主机，无法删除，请先删除相关主机'; $msgType = 'error';
             } else {
-                $stmt = $DB->prepare("DELETE FROM vhost_models WHERE id=?");
-                $stmt->execute([$mid]);
-                $msg = '型号已删除'; $msgType = 'success';
+                try {
+                    // 先清理购物车中关联的该型号记录，避免外键约束
+                    $DB->prepare("DELETE FROM cart_items WHERE model_id=?")->execute([$mid]);
+                    $stmt = $DB->prepare("DELETE FROM vhost_models WHERE id=?");
+                    $stmt->execute([$mid]);
+                    $msg = '型号已删除'; $msgType = 'success';
+                } catch (Exception $e) {
+                    $msg = '删除失败：' . $e->getMessage(); $msgType = 'error';
+                }
             }
             break;
         case 'del_vhost':
@@ -338,6 +373,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ids = $_POST['ids'] ?? [];
             if (is_string($ids)) $ids = $ids !== '' ? explode(',', $ids) : [];
             $points = intval($_POST['points_amount'] ?? 0);
+            if ($points === 0) { $msg = '积分变动值不能为0'; $msgType = 'error'; break; }
+            if ($points < 0) {
+                // 扣减积分时，需确保不会扣成负数
+                $ids = is_array($ids) ? $ids : ($ids !== '' ? explode(',', $ids) : []);
+                $blocked = false;
+                foreach ($ids as $uid) {
+                    $uid = intval($uid);
+                    $chkStmt = $DB->prepare("SELECT points FROM users WHERE id=?");
+                    $chkStmt->execute([$uid]);
+                    $uRow = $chkStmt->fetch();
+                    if ($uRow && ($uRow['points'] + $points) < 0) {
+                        $msg = '用户ID ' . $uid . ' 积分不足，无法扣减'; $msgType = 'error'; $blocked = true; break;
+                    }
+                }
+                if ($blocked) break;
+            }
             $count = 0;
             foreach ($ids as $uid) {
                 $uid = intval($uid);
@@ -569,25 +620,45 @@ $totalUsers = $DB->query("SELECT COUNT(*) as c FROM users")->fetch()['c'];
 $totalVhosts = $DB->query("SELECT COUNT(*) as c FROM vhosts")->fetch()['c'];
 $todayVisits = $DB->query("SELECT COUNT(*) as c FROM visit_logs WHERE visit_date=CURDATE()")->fetch()['c'];
 $totalOrders = $DB->query("SELECT COUNT(*) as c FROM orders WHERE status=1")->fetch()['c'];
-$pages = ['dashboard','config','servers','vhost_categories','vhost_models','vhosts','users','prices','recharge_packages','coupons','tickets','announcement','statistics','about'];
+$pages = ['dashboard','product','users_instances','pricing','tickets','announcement','config','about'];
 if (!in_array($page, $pages)) $page = 'dashboard';
 
 $pageTitles = [
     'dashboard' => ['icon' => 'fa-chart-pie', 'title' => '仪表盘', 'desc' => '系统数据总览'],
-    'config' => ['icon' => 'fa-cog', 'title' => '系统配置', 'desc' => '网站参数设置'],
-    'servers' => ['icon' => 'fa-server', 'title' => '服务器管理', 'desc' => 'MNBT多服务器配置'],
-    'vhost_categories' => ['icon' => 'fa-tags', 'title' => '分类管理', 'desc' => '三级分类管理'],
-    'vhost_models' => ['icon' => 'fa-cube', 'title' => '主机型号', 'desc' => '产品套餐管理'],
-    'vhosts' => ['icon' => 'fa-server', 'title' => '虚拟主机', 'desc' => '用户主机列表'],
-    'users' => ['icon' => 'fa-users', 'title' => '用户管理', 'desc' => '会员信息管理'],
-    'prices' => ['icon' => 'fa-tags', 'title' => '价格设置', 'desc' => '积分与定价'],
-    'recharge_packages' => ['icon' => 'fa-coins', 'title' => '充值套餐', 'desc' => '自定义积分充值套餐'],
-    'coupons' => ['icon' => 'fa-ticket-alt', 'title' => '优惠码管理', 'desc' => '优惠码创建与管理'],
+    'product' => ['icon' => 'fa-cube', 'title' => '商品设置', 'desc' => '分类与型号管理'],
+    'users_instances' => ['icon' => 'fa-users', 'title' => '用户及实例', 'desc' => '用户与主机管理'],
+    'pricing' => ['icon' => 'fa-tags', 'title' => '定价与优惠', 'desc' => '定价与促销管理'],
     'tickets' => ['icon' => 'fa-headset', 'title' => '工单管理', 'desc' => '用户工单处理'],
     'announcement' => ['icon' => 'fa-bullhorn', 'title' => '公告管理', 'desc' => '网站公告发布'],
-    'statistics' => ['icon' => 'fa-chart-line', 'title' => '消费统计', 'desc' => '运营数据分析'],
+    'config' => ['icon' => 'fa-cog', 'title' => '系统配置', 'desc' => '网站参数设置'],
     'about' => ['icon' => 'fa-info-circle', 'title' => '关于项目', 'desc' => '关于 StarIDC']
 ];
+
+// 二级菜单定义
+$subMenus = [
+    'users_instances' => [
+        'vhosts' => ['icon' => 'fa-server', 'title' => '虚拟主机'],
+        'users' => ['icon' => 'fa-user', 'title' => '用户管理']
+    ],
+    'pricing' => [
+        'pricing_main' => ['icon' => 'fa-coins', 'title' => '定价'],
+        'promotions' => ['icon' => 'fa-gift', 'title' => '优惠']
+    ]
+];
+
+// 二级页面路由
+$subPage = $_GET['sub'] ?? '';
+$validSubs = [
+    'users_instances' => ['vhosts', 'users'],
+    'pricing' => ['pricing_main', 'promotions']
+];
+if (!isset($validSubs[$page]) || ($subPage && !in_array($subPage, $validSubs[$page]))) {
+    $subPage = '';
+}
+// 为二级菜单页面设置默认子页面
+if (isset($validSubs[$page]) && !$subPage) {
+    $subPage = $validSubs[$page][0];
+}
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -598,22 +669,22 @@ $pageTitles = [
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
 :root{
---primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
---primary-solid: #667eea;
---success: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
---warning: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
---danger: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
---info: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
---dark: #1a1a2e;
---gray-100: #f7fafc;
---gray-200: #edf2f7;
+--primary: linear-gradient(135deg, #10b981 0%, #059669 100%);
+--primary-solid: #10b981;
+--success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+--warning: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+--danger: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+--info: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+--dark: #1e293b;
+--gray-100: #f8fafc;
+--gray-200: #f1f5f9;
 --gray-300: #e2e8f0;
---gray-500: #718096;
---gray-700: #4a5568;
---gray-900: #1a202c;
---shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
---shadow: 0 4px 6px rgba(0,0,0,0.07);
---shadow-lg: 0 10px 25px rgba(0,0,0,0.1);
+--gray-500: #64748b;
+--gray-700: #475569;
+--gray-900: #0f172a;
+--shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+--shadow: 0 4px 6px rgba(0,0,0,0.05);
+--shadow-lg: 0 10px 25px rgba(0,0,0,0.08);
 }
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;color:var(--gray-700);font-size:.95rem;background:var(--gray-100);line-height:1.6}
@@ -629,7 +700,7 @@ a{text-decoration:none;color:inherit}
 .topbar-user{display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 12px;border-radius:10px;transition:all .2s}
 .topbar-user:hover{background:var(--gray-100)}
 .topbar-user i{color:var(--gray-500)}
-.user-avatar{width:36px;height:36px;border-radius:10px;background:var(--primary);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600}
+.user-avatar{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#10b981,#059669);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600}
 
 /* 主布局 */
 .layout{display:flex;min-height:calc(100vh - 64px)}
@@ -637,7 +708,7 @@ a{text-decoration:none;color:inherit}
 .sidebar-title{padding:0 20px 16px;font-size:.75rem;text-transform:uppercase;letter-spacing:1px;color:var(--gray-500);font-weight:600;border-bottom:1px solid var(--gray-200);margin-bottom:12px}
 .sidebar-nav a{display:flex;align-items:center;gap:12px;padding:12px 20px;color:var(--gray-700);transition:all .2s;font-weight:500}
 .sidebar-nav a:hover{background:var(--gray-100);color:var(--primary-solid)}
-.sidebar-nav a.active{background:linear-gradient(90deg,rgba(102,126,234,0.1) 0%,rgba(118,75,162,0.1) 100%);color:var(--primary-solid);border-right:3px solid var(--primary-solid);font-weight:600}
+.sidebar-nav a.active{background:linear-gradient(90deg,rgba(16,185,129,0.08) 0%,rgba(5,150,105,0.08) 100%);color:var(--primary-solid);border-right:3px solid var(--primary-solid);font-weight:600}
 .sidebar-nav a i{width:20px;text-align:center;color:var(--gray-500)}
 .sidebar-nav a.active i{color:var(--primary-solid)}
 .sidebar-footer{padding:20px;margin-top:auto;border-top:1px solid var(--gray-200)}
@@ -664,10 +735,10 @@ a{text-decoration:none;color:inherit}
 .stat-card{background:#fff;border-radius:16px;padding:24px;box-shadow:var(--shadow);transition:all .3s;cursor:default}
 .stat-card:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
 .stat-card .icon{width:56px;height:56px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;margin-bottom:16px}
-.stat-card .icon.users{background:linear-gradient(135deg,#667eea22,#764ba222);color:#667eea}
-.stat-card .icon.vhosts{background:linear-gradient(135deg,#11998e22,#38ef7d22);color:#11998e}
-.stat-card .icon.visits{background:linear-gradient(135deg,#4facfe22,#00f2fe22);color:#4facfe}
-.stat-card .icon.orders{background:linear-gradient(135deg,#f093fb22,#f5576c22);color:#f5576c}
+.stat-card .icon.users{background:linear-gradient(135deg,#10b98122,#05966922);color:#10b981}
+.stat-card .icon.vhosts{background:linear-gradient(135deg,#0ea5e922,#0284c722);color:#0ea5e9}
+.stat-card .icon.visits{background:linear-gradient(135deg,#8b5cf622,#7c3aed22);color:#8b5cf6}
+.stat-card .icon.orders{background:linear-gradient(135deg,#f59e0b22,#f9731622);color:#f59e0b}
 .stat-card .num{font-size:2rem;font-weight:700;color:var(--gray-900);margin-bottom:4px}
 .stat-card .label{color:var(--gray-500);font-size:.85rem}
 .stat-card .trend{font-size:.8rem;margin-top:8px;display:flex;align-items:center;gap:4px}
@@ -692,21 +763,21 @@ tr:last-child:hover td{background:transparent}
 
 /* 按钮 */
 .btn{padding:10px 18px;border:none;border-radius:10px;font-size:.9rem;font-weight:600;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
-.btn-primary{background:var(--primary);color:#fff;box-shadow:0 4px 12px rgba(102,126,234,0.3)}
-.btn-primary:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(102,126,234,0.4)}
+.btn-primary{background:var(--primary);color:#fff;box-shadow:0 4px 12px rgba(16,185,129,0.25)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(16,185,129,0.35)}
 .btn-outline{background:transparent;border:2px solid var(--gray-300);color:var(--gray-700)}
 .btn-outline:hover{background:var(--gray-100);border-color:var(--gray-400)}
 .btn-sm{padding:6px 12px;font-size:.8rem;border-radius:8px}
 .btn-danger{background:var(--danger);color:#fff}
-.btn-danger:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(255,65,108,0.3)}
+.btn-danger:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(239,68,68,0.3)}
 .btn-success{background:var(--success);color:#fff}
-.btn-success:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(17,153,142,0.3)}
+.btn-success:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(16,185,129,0.3)}
 
 /* 表单 */
 .form-group{margin-bottom:20px}
 .form-label{display:block;margin-bottom:8px;font-weight:600;color:var(--gray-700);font-size:.9rem}
 .form-control{width:100%;padding:12px 16px;border:2px solid var(--gray-200);border-radius:10px;font-size:.95rem;transition:all .3s;background:#fff}
-.form-control:focus{border-color:var(--primary-solid);outline:none;box-shadow:0 0 0 4px rgba(102,126,234,0.1)}
+.form-control:focus{border-color:var(--primary-solid);outline:none;box-shadow:0 0 0 4px rgba(16,185,129,0.1)}
 .form-control::placeholder{color:var(--gray-500)}
 textarea.form-control{min-height:120px;resize:vertical}
 select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23718096' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 16px center;padding-right:44px}
@@ -774,8 +845,13 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 .layout{flex-direction:column}
 .sidebar{width:100%;padding:12px 0}
 .sidebar-nav{display:flex;flex-wrap:wrap;gap:4px;padding:0 12px}
-.sidebar-nav a{padding:10px 14px;border-radius:10px;flex:1;justify-content:center;min-width:120px}
-.sidebar-nav a.active{border-right:none;border-bottom:3px solid var(--primary-solid)}
+.sidebar-nav>a{padding:10px 14px;border-radius:10px;flex:1;justify-content:center;min-width:120px}
+.sidebar-nav>a.active{border-right:none;border-bottom:3px solid var(--primary-solid)}
+.menu-group{width:100%;min-width:100%}
+.menu-group-header{padding:10px 14px;border-radius:10px}
+.menu-group-items{max-height:none!important;display:none}
+.menu-group.open .menu-group-items{display:block}
+.menu-group-items a{padding:8px 14px 8px 36px}
 .sidebar-title{display:none}
 .sidebar-footer{display:none}
 .main{padding:16px}
@@ -787,14 +863,36 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 /* 动画 */
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .fade-in{animation:fadeIn .3s ease}
+.menu-group{border-radius:8px;overflow:hidden;margin:2px 0}
+.menu-group-header{display:flex;align-items:center;gap:12px;padding:12px 20px;color:var(--gray-700);transition:all .2s;font-weight:500;cursor:pointer;width:100%;text-decoration:none}
+.menu-group-header:hover{background:var(--gray-100);color:var(--primary-solid)}
+.menu-group-header.active{background:linear-gradient(90deg,rgba(16,185,129,0.08) 0%,rgba(5,150,105,0.08) 100%);color:var(--primary-solid);font-weight:600}
+.menu-group-header.active i:first-child{color:var(--primary-solid)}
+.menu-arrow{margin-left:auto;font-size:.7rem;transition:transform .2s;color:var(--gray-500)}
+.menu-group.open .menu-arrow{transform:rotate(180deg)}
+.menu-group-items{max-height:0;overflow:hidden;transition:max-height .25s ease}
+.menu-group.open .menu-group-items{max-height:200px}
+.menu-group-items a{display:flex;align-items:center;gap:10px;padding:10px 20px 10px 48px;color:var(--gray-500);font-size:.9rem;transition:all .2s;font-weight:500;text-decoration:none}
+.menu-group-items a:hover{color:var(--primary-solid);background:var(--gray-100)}
+.menu-group-items a.active{color:var(--primary-solid);font-weight:600;background:linear-gradient(90deg,rgba(16,185,129,0.05) 0%,rgba(5,150,105,0.05) 100%);border-right:3px solid var(--primary-solid)}
+.ticket-badge{display:inline-block;width:8px;height:8px;background:#ef4444;border-radius:50%;margin-left:6px;animation:tkPulse 1s ease-in-out infinite;vertical-align:middle}
+@keyframes tkPulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(239,68,68,0.5)}50%{opacity:.6;box-shadow:0 0 0 4px rgba(239,68,68,0)}}
 </style>
 </head>
 <body>
+<?php
+// 工单待处理数量（用于侧边栏红点提醒）
+try {
+    $pendingTicketCount = intval($DB->query("SELECT COUNT(*) as c FROM tickets WHERE status=0")->fetch()['c']);
+} catch (Exception $e) {
+    $pendingTicketCount = 0;
+}
+?>
 <!-- 顶部导航 -->
 <nav class="topbar">
 <div class="topbar-left">
 <span class="topbar-logo"><i class="fas fa-cloud"></i> 管理后台</span>
-<span class="topbar-page">/ <?php echo $pageTitles[$page]['title']; ?></span>
+<span class="topbar-page">/ <?php echo $pageTitles[$page]['title']; ?><?php if($subPage && isset($subMenus[$page][$subPage])): ?> / <?php echo $subMenus[$page][$subPage]['title']; ?><?php endif; ?></span>
 </div>
 <div class="topbar-right">
 <div class="topbar-user">
@@ -811,10 +909,28 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 <div class="sidebar-title">导航菜单</div>
 <nav class="sidebar-nav">
 <?php foreach($pages as $p): ?>
-<a href="?page=<?php echo $p; ?>" class="<?php echo $page===$p?'active':''; ?>">
+<?php if (isset($subMenus[$p])): ?>
+<div class="menu-group<?php echo $page===$p?' open':''; ?>">
+<a href="javascript:void(0)" class="menu-group-header<?php echo $page===$p?' active':''; ?>" onclick="toggleMenuGroup(this)">
 <i class="fas <?php echo $pageTitles[$p]['icon']; ?>"></i>
 <span><?php echo $pageTitles[$p]['title']; ?></span>
+<i class="fas fa-chevron-down menu-arrow"></i>
 </a>
+<div class="menu-group-items">
+<?php foreach($subMenus[$p] as $subKey => $subInfo): ?>
+<a href="?page=<?php echo $p; ?>&sub=<?php echo $subKey; ?>" class="<?php echo ($page===$p && $subPage===$subKey)?'active':''; ?>">
+<i class="fas <?php echo $subInfo['icon']; ?>"></i>
+<span><?php echo $subInfo['title']; ?></span>
+</a>
+<?php endforeach; ?>
+</div>
+</div>
+<?php else: ?>
+<a href="?page=<?php echo $p; ?>" class="<?php echo $page===$p?'active':''; ?>">
+<i class="fas <?php echo $pageTitles[$p]['icon']; ?>"></i>
+<span><?php echo $pageTitles[$p]['title']; ?><?php if($p==='tickets' && $pendingTicketCount>0): ?><span class="ticket-badge" title="<?php echo $pendingTicketCount; ?>个工单待处理"></span><?php endif; ?></span>
+</a>
+<?php endif; ?>
 <?php endforeach; ?>
 </nav>
 <div class="sidebar-footer">
@@ -837,7 +953,7 @@ select.form-control{appearance:none;background-image:url("data:image/svg+xml,%3C
 <div class="page-title">
 <div class="icon"><i class="fas <?php echo $pageTitles[$page]['icon']; ?>"></i></div>
 <div>
-<h1><?php echo $pageTitles[$page]['title']; ?></h1>
+<h1><?php echo $pageTitles[$page]['title']; ?><?php if($subPage && isset($subMenus[$page][$subPage])): ?> - <?php echo $subMenus[$page][$subPage]['title']; ?><?php endif; ?></h1>
 <p class="page-desc"><?php echo $pageTitles[$page]['desc']; ?></p>
 </div>
 </div>
@@ -854,7 +970,7 @@ $latestUpdate = checkUpdate();
 <div style="flex:1;min-width:260px">
 <h3 style="margin:0 0 8px;font-size:1.1rem;color:#92400e">发现新版本</h3>
 <p style="margin:0 0 12px;color:#78350f;line-height:1.6">
-当前版本 <strong><?php echo h(conf('current_version','1.3.0')); ?></strong>，官方最新版本为 <strong><?php echo h($latestUpdate['version']); ?></strong>。
+当前版本 <strong><?php echo h(conf('current_version','1.4.0')); ?></strong>，官方最新版本为 <strong><?php echo h($latestUpdate['version']); ?></strong>。
 <?php if(!empty($latestUpdate['release_note'])): ?><br><span style="color:#92400e"><?php echo nl2br(h($latestUpdate['release_note'])); ?></span><?php endif; ?>
 </p>
 <a href="<?php echo h($latestUpdate['download_url']); ?>" target="_blank" class="btn btn-primary" style="background:#f59e0b;border-color:#f59e0b"><i class="fas fa-download"></i> 立即下载更新</a>
@@ -884,6 +1000,71 @@ $latestUpdate = checkUpdate();
 <div class="icon orders"><i class="fas fa-shopping-cart"></i></div>
 <div class="num"><?php echo number_format($totalOrders); ?></div>
 <div class="label">成功订单</div>
+</div>
+</div>
+
+<!-- 消费统计 -->
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-chart-line"></i> 消费统计</h3>
+<span class="badge badge-info" style="margin-left:8px">最近30天</span>
+</div>
+<?php
+$statStartDate = date('Y-m-d', strtotime('-30 days'));
+$statEndDate = date('Y-m-d');
+$orderStats = $DB->prepare("SELECT COUNT(*) as total_count, SUM(amount) as total_amount FROM orders WHERE status=1 AND created_at >= ? AND created_at <= ?");
+$orderStats->execute([$statStartDate . ' 00:00:00', $statEndDate . ' 23:59:59']);
+$orderData = $orderStats->fetch();
+$pointsConsume = $DB->prepare("SELECT SUM(points) as total_points FROM orders WHERE status = 1 AND created_at >= ? AND created_at <= ?");
+$pointsConsume->execute([$statStartDate . ' 00:00:00', $statEndDate . ' 23:59:59']);
+$pointsData = $pointsConsume->fetch();
+$userConsume = $DB->prepare("SELECT u.id, u.email, u.nickname, COUNT(o.id) as order_count, SUM(o.amount) as total_spent FROM orders o LEFT JOIN users u ON o.user_id = u.id WHERE o.status = 1 AND o.created_at >= ? AND o.created_at <= ? GROUP BY u.id, u.email, u.nickname ORDER BY total_spent DESC LIMIT 5");
+$userConsume->execute([$statStartDate . ' 00:00:00', $statEndDate . ' 23:59:59']);
+$topUsers = $userConsume->fetchAll();
+$modelSales = $DB->prepare("SELECT vm.name, vm.price, COUNT(v.id) as sell_count, SUM(vm.price) as total_revenue FROM vhosts v LEFT JOIN vhost_models vm ON v.model_id = vm.id WHERE v.created_at >= ? AND v.created_at <= ? GROUP BY vm.name, vm.price ORDER BY sell_count DESC LIMIT 5");
+$modelSales->execute([$statStartDate . ' 00:00:00', $statEndDate . ' 23:59:59']);
+$topModels = $modelSales->fetchAll();
+?>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;padding:0 24px 16px">
+<div style="text-align:center;padding:12px;background:var(--gray-100);border-radius:10px">
+<div style="font-size:.8rem;color:var(--gray-500);margin-bottom:4px">订单数</div>
+<div style="font-size:1.4rem;font-weight:700;color:var(--dark)"><?php echo intval($orderData['total_count'] ?? 0); ?></div>
+</div>
+<div style="text-align:center;padding:12px;background:var(--gray-100);border-radius:10px">
+<div style="font-size:.8rem;color:var(--gray-500);margin-bottom:4px">总金额</div>
+<div style="font-size:1.4rem;font-weight:700;color:#059669">¥<?php echo number_format($orderData['total_amount'] ?? 0, 2); ?></div>
+</div>
+<div style="text-align:center;padding:12px;background:var(--gray-100);border-radius:10px">
+<div style="font-size:.8rem;color:var(--gray-500);margin-bottom:4px">积分消耗</div>
+<div style="font-size:1.4rem;font-weight:700;color:#f59e0b"><?php echo number_format($pointsData['total_points'] ?? 0); ?></div>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:0 24px 20px">
+<div>
+<h4 style="font-size:.9rem;color:var(--gray-500);margin:0 0 8px">用户消费排行</h4>
+<?php if(empty($topUsers)): ?>
+<p style="color:var(--gray-400);font-size:.85rem">暂无数据</p>
+<?php else: foreach($topUsers as $i => $u): ?>
+<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--gray-200);font-size:.85rem">
+<span><?php echo $i+1; ?>. <?php echo h($u['email'] ?? '已删除'); ?></span>
+<span style="color:#059669;font-weight:600">¥<?php echo number_format($u['total_spent'] ?? 0, 2); ?></span>
+</div>
+<?php endforeach; endif; ?>
+</div>
+<div>
+<h4 style="font-size:.9rem;color:var(--gray-500);margin:0 0 8px">主机销售排行</h4>
+<?php if(empty($topModels)): ?>
+<p style="color:var(--gray-400);font-size:.85rem">暂无数据</p>
+<?php else: foreach($topModels as $i => $m): ?>
+<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--gray-200);font-size:.85rem">
+<span><?php echo $i+1; ?>. <?php echo h($m['name'] ?? '已删除'); ?></span>
+<span style="font-weight:600"><?php echo $m['sell_count']; ?> 台</span>
+</div>
+<?php endforeach; endif; ?>
+</div>
+</div>
+<div style="padding:0 24px 20px">
+<a href="?page=dashboard&detail_stats=1" class="btn btn-sm btn-outline"><i class="fas fa-chart-line"></i> 详细统计</a>
 </div>
 </div>
 
@@ -919,6 +1100,85 @@ $latestUpdate = checkUpdate();
 </li>
 </ul>
 </div>
+
+<?php if(isset($_GET['detail_stats'])): ?>
+<div class="card" style="margin-top:20px">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-calendar"></i> 详细消费统计</h3>
+</div>
+<form method="get" class="form-row" style="align-items:flex-end">
+<input type="hidden" name="page" value="dashboard">
+<input type="hidden" name="detail_stats" value="1">
+<div class="form-group">
+<label class="form-label">开始日期</label>
+<input type="date" name="start_date" value="<?php echo h($_GET['start_date'] ?? date('Y-m-01')); ?>" class="form-control">
+</div>
+<div class="form-group">
+<label class="form-label">结束日期</label>
+<input type="date" name="end_date" value="<?php echo h($_GET['end_date'] ?? date('Y-m-d')); ?>" class="form-control">
+</div>
+<div>
+<button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> 筛选</button>
+</div>
+</form>
+</div>
+
+<?php
+$startDate = $_GET['start_date'] ?? date('Y-m-01');
+$endDate = $_GET['end_date'] ?? date('Y-m-d');
+$dOrderStats = $DB->prepare("SELECT COUNT(*) as total_count, SUM(amount) as total_amount FROM orders WHERE status=1 AND created_at >= ? AND created_at <= ?");
+$dOrderStats->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+$dOrderData = $dOrderStats->fetch();
+$dUserConsume = $DB->prepare("SELECT u.id, u.email, u.nickname, COUNT(o.id) as order_count, SUM(o.amount) as total_spent FROM orders o LEFT JOIN users u ON o.user_id = u.id WHERE o.status = 1 AND o.created_at >= ? AND o.created_at <= ? GROUP BY u.id, u.email, u.nickname ORDER BY total_spent DESC LIMIT 20");
+$dUserConsume->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+$dTopUsers = $dUserConsume->fetchAll();
+$dModelSales = $DB->prepare("SELECT vm.name, vm.price, COUNT(v.id) as sell_count, SUM(vm.price) as total_revenue FROM vhosts v LEFT JOIN vhost_models vm ON v.model_id = vm.id WHERE v.created_at >= ? AND v.created_at <= ? GROUP BY vm.name, vm.price ORDER BY sell_count DESC LIMIT 10");
+$dModelSales->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+$dTopModels = $dModelSales->fetchAll();
+$dPointsConsume = $DB->prepare("SELECT SUM(points) as total_points FROM orders WHERE status = 1 AND created_at >= ? AND created_at <= ?");
+$dPointsConsume->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+$dPointsData = $dPointsConsume->fetch();
+?>
+<div class="stats-grid" style="margin-top:20px">
+<div class="stat-card fade-in">
+<div class="icon users"><i class="fas fa-receipt"></i></div>
+<div class="num"><?php echo intval($dOrderData['total_count'] ?? 0); ?></div>
+<div class="label">订单总数</div>
+</div>
+<div class="stat-card fade-in" style="animation-delay:.1s">
+<div class="icon orders"><i class="fas fa-yen-sign"></i></div>
+<div class="num">¥<?php echo number_format($dOrderData['total_amount'] ?? 0, 2); ?></div>
+<div class="label">订单总金额</div>
+</div>
+<div class="stat-card fade-in" style="animation-delay:.2s">
+<div class="icon visits"><i class="fas fa-chart-bar"></i></div>
+<div class="num">¥<?php echo number_format($dOrderData['total_amount'] / max($dOrderData['total_count'], 1), 2); ?></div>
+<div class="label">平均客单价</div>
+</div>
+<div class="stat-card fade-in" style="animation-delay:.3s">
+<div class="icon vhosts"><i class="fas fa-coins"></i></div>
+<div class="num"><?php echo number_format($dPointsData['total_points'] ?? 0); ?></div>
+<div class="label">积分消耗</div>
+</div>
+</div>
+<div class="card">
+<div class="card-header"><h3 class="card-title"><i class="fas fa-trophy"></i> 用户消费排行</h3></div>
+<div class="table-wrapper"><table><thead><tr><th>排名</th><th>用户</th><th>订单数</th><th>消费金额</th></tr></thead><tbody>
+<?php $rank=1; foreach($dTopUsers as $u): ?>
+<tr><td><?php echo $rank++; ?></td><td><?php echo h($u['email'] ?? '已删除'); ?></td><td><span class="badge badge-info"><?php echo $u['order_count']; ?> 单</span></td><td><strong style="color:#059669">¥<?php echo number_format($u['total_spent'] ?? 0, 2); ?></strong></td></tr>
+<?php endforeach; ?>
+<?php if(empty($dTopUsers)): ?><tr><td colspan="4" style="text-align:center;padding:40px;color:var(--gray-500)">暂无数据</td></tr><?php endif; ?>
+</tbody></table></div></div>
+<div class="card">
+<div class="card-header"><h3 class="card-title"><i class="fas fa-cube"></i> 主机销售排行</h3></div>
+<div class="table-wrapper"><table><thead><tr><th>型号</th><th>单价</th><th>销量</th><th>销售额</th></tr></thead><tbody>
+<?php foreach($dTopModels as $m): ?>
+<tr><td><strong><?php echo h($m['name'] ?? '已删除'); ?></strong></td><td><span class="badge badge-purple"><?php echo $m['price']; ?> 积分</span></td><td><?php echo $m['sell_count']; ?></td><td><strong style="color:#059669"><?php echo number_format($m['total_revenue']); ?> 积分</strong></td></tr>
+<?php endforeach; ?>
+<?php if(empty($dTopModels)): ?><tr><td colspan="4" style="text-align:center;padding:40px;color:var(--gray-500)">暂无数据</td></tr><?php endif; ?>
+</tbody></table></div></div>
+<?php endif; ?>
+
 <?php endif; ?>
 
 <!-- 系统配置 -->
@@ -931,7 +1191,7 @@ $latestUpdate = checkUpdate();
 <a class="tab" onclick="showTab('tab-site')"><i class="fas fa-cog"></i> 网站设置</a>
 </div>
 
-<form method="post"><input type="hidden" name="action" value="save_config">
+<form method="post"><?php echo csrfField(); ?><input type="hidden" name="action" value="save_config">
 
 <div id="tab-mnbt" class="tab-content active">
 <div class="card">
@@ -973,20 +1233,177 @@ $latestUpdate = checkUpdate();
 </div>
 </div>
 
-<div style="margin:20px;padding:20px;border-radius:12px;background:linear-gradient(135deg,#667eea15,#764ba215);border:1px solid var(--primary-solid);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
-<div>
-<div style="font-weight:700;font-size:1rem;color:var(--dark)"><i class="fas fa-network-wired" style="color:var(--primary-solid);margin-right:8px"></i>多服务器管理</div>
-<div style="font-size:.85rem;color:var(--gray-500);margin-top:4px">
-<?php try { $sc=$DB->query("SELECT COUNT(*) as c FROM mnbt_servers")->fetch()['c']; } catch(Exception $e) { $sc=0; } ?>
-当前已配置 <strong style="color:var(--primary-solid)"><?php echo $sc; ?></strong> 台MNBT服务器，可给不同主机型号分配不同服务器
-<?php if($sc==0): ?>
-<br><span style="color:var(--danger)"><i class="fas fa-exclamation-triangle"></i> <?php if(conf('mnbt_api_url')): ?>检测到旧版MNBT配置，请运行 upgrade.php 迁移为多服务器配置<?php else: ?>尚未添加任何MNBT服务器，请点击右侧按钮添加<?php endif; ?></span>
+<div class="card" style="margin-top:20px">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-plus-circle"></i> 添加MNBT服务器</h3>
+</div>
+<form method="post" class="form-row">
+<?php echo csrfField(); ?>
+<input type="hidden" name="action" value="add_server">
+<div class="form-group" style="flex:1.5">
+<label class="form-label">服务器名称</label>
+<input type="text" name="name" required class="form-control" placeholder="如：香港节点">
+</div>
+<div class="form-group" style="flex:2">
+<label class="form-label">API地址</label>
+<input type="text" name="api_url" required class="form-control" placeholder="http://xxx/api/api.php">
+</div>
+<div class="form-group">
+<label class="form-label">宝塔编号 (mn_bh)</label>
+<input type="text" name="mn_bh" class="form-control">
+</div>
+<div class="form-group">
+<label class="form-label">API秘钥 (mn_key)</label>
+<input type="text" name="mn_key" class="form-control">
+</div>
+<div class="form-group">
+<label class="form-label">宝塔调用秘钥 (mn_keye)</label>
+<input type="text" name="mn_keye" class="form-control">
+</div>
+<div class="form-group" style="flex:0.5">
+<label class="form-label">插件版本 (mn_vs)</label>
+<input type="text" name="mn_vs" value="16" class="form-control">
+</div>
+<div style="display:flex;align-items:flex-end">
+<button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> 添加</button>
+</div>
+</form>
+</div>
+
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-server"></i> 服务器列表</h3>
+</div>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>名称</th>
+<th>API地址</th>
+<th>宝塔编号</th>
+<th>VS</th>
+<th>状态</th>
+<th>操作</th>
+</tr>
+</thead>
+<tbody>
+<?php try { $servers=$DB->query("SELECT * FROM mnbt_servers ORDER BY sort_order,id")->fetchAll(); } catch(Exception $e) { $servers=[]; } foreach($servers as $srv): ?>
+<tr>
+<td><?php echo $srv['id']; ?></td>
+<td><strong><?php echo h($srv['name']); ?></strong></td>
+<td style="font-size:.85rem;color:var(--gray-500)"><?php echo h($srv['api_url']); ?></td>
+<td><?php echo h($srv['mn_bh']); ?></td>
+<td><?php echo h($srv['mn_vs']); ?></td>
+<td>
+<?php if($srv['status']): ?>
+<span class="badge badge-success"><i class="fas fa-check"></i> 启用</span>
+<?php else: ?>
+<span class="badge badge-danger"><i class="fas fa-times"></i> 禁用</span>
 <?php endif; ?>
+</td>
+<td>
+<button type="button" class="btn btn-sm btn-outline" onclick="editServer(<?php echo htmlspecialchars(json_encode($srv), ENT_QUOTES, 'UTF-8'); ?>)"><i class="fas fa-edit"></i> 编辑</button>
+<form method="post" style="display:inline">
+<?php echo csrfField(); ?>
+<input type="hidden" name="action" value="test_server">
+<input type="hidden" name="id" value="<?php echo $srv['id']; ?>">
+<button type="submit" class="btn btn-sm btn-outline"><i class="fas fa-plug"></i> 测试</button>
+</form>
+<form method="post" style="display:inline">
+<?php echo csrfField(); ?>
+<input type="hidden" name="action" value="toggle_server">
+<input type="hidden" name="id" value="<?php echo $srv['id']; ?>">
+<input type="hidden" name="status" value="<?php echo $srv['status']?0:1; ?>">
+<button type="submit" class="btn btn-sm <?php echo $srv['status']?'btn-outline':'btn-success'; ?>">
+<?php echo $srv['status']?'禁用':'启用'; ?>
+</button>
+</form>
+<form method="post" style="display:inline" onsubmit="return confirm('确定删除此服务器？已绑定此服务器的型号将回退到默认配置')">
+<?php echo csrfField(); ?>
+<input type="hidden" name="action" value="del_server">
+<input type="hidden" name="id" value="<?php echo $srv['id']; ?>">
+<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+</form>
+</td>
+</tr>
+<?php endforeach; ?>
+<?php if(empty($servers)): ?>
+<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--gray-500)">
+<i class="fas fa-inbox" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>
+暂无服务器，未配置服务器的型号将使用「系统配置」中的默认MNBT配置
+</td></tr>
+<?php endif; ?>
+</tbody>
+</table>
 </div>
 </div>
-<a href="?page=servers" class="btn btn-primary"><i class="fas fa-plus-circle"></i> 管理服务器</a>
+
+<!-- 编辑服务器弹窗 -->
+<div id="editServerOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9999;backdrop-filter:blur(4px)" onclick="closeEditServer()"></div>
+<div id="editServerModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10000;width:500px;max-width:92vw;background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200)">
+<h3 style="margin:0;font-size:1.15rem"><i class="fas fa-edit" style="color:var(--primary-solid);margin-right:8px"></i>编辑服务器</h3>
+<button type="button" onclick="closeEditServer()" style="background:none;border:none;font-size:1.6rem;cursor:pointer;color:var(--gray-500);line-height:1">&times;</button>
+</div>
+<form method="post" style="padding:20px 24px">
+<?php echo csrfField(); ?>
+<input type="hidden" name="action" value="edit_server">
+<input type="hidden" name="id" id="editSrvId">
+<div class="form-group" style="margin-bottom:16px">
+<label class="form-label">服务器名称</label>
+<input type="text" name="name" id="editSrvName" required class="form-control">
+</div>
+<div class="form-group" style="margin-bottom:16px">
+<label class="form-label">API地址</label>
+<input type="text" name="api_url" id="editSrvApiUrl" required class="form-control" placeholder="http://xxx/api/api.php">
+</div>
+<div class="form-row" style="margin-bottom:16px">
+<div class="form-group">
+<label class="form-label">宝塔编号 (mn_bh)</label>
+<input type="text" name="mn_bh" id="editSrvBh" class="form-control">
+</div>
+<div class="form-group">
+<label class="form-label">API秘钥 (mn_key)</label>
+<input type="text" name="mn_key" id="editSrvKey" class="form-control">
 </div>
 </div>
+<div class="form-row" style="margin-bottom:16px">
+<div class="form-group">
+<label class="form-label">宝塔调用秘钥 (mn_keye)</label>
+<input type="text" name="mn_keye" id="editSrvKeye" class="form-control">
+</div>
+<div class="form-group" style="flex:0.5">
+<label class="form-label">插件版本 (mn_vs)</label>
+<input type="text" name="mn_vs" id="editSrvVs" value="16" class="form-control">
+</div>
+</div>
+<div style="display:flex;gap:10px;justify-content:flex-end">
+<button type="button" class="btn btn-outline" onclick="closeEditServer()">取消</button>
+<button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存修改</button>
+</div>
+</form>
+</div>
+</div>
+<script>
+function editServer(srv){
+    document.getElementById('editSrvId').value = srv.id;
+    document.getElementById('editSrvName').value = srv.name;
+    document.getElementById('editSrvApiUrl').value = srv.api_url;
+    document.getElementById('editSrvBh').value = srv.mn_bh;
+    document.getElementById('editSrvKey').value = srv.mn_key;
+    document.getElementById('editSrvKeye').value = srv.mn_keye;
+    document.getElementById('editSrvVs').value = srv.mn_vs;
+    document.getElementById('editServerOverlay').style.display = 'block';
+    document.getElementById('editServerModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+function closeEditServer(){
+    document.getElementById('editServerOverlay').style.display = 'none';
+    document.getElementById('editServerModal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+</script>
 
 <div id="tab-pay" class="tab-content">
 <div class="card">
@@ -1202,7 +1619,7 @@ foreach ($customIconTypes as $ck => $cv):
 <div class="form-row">
 <div class="form-group">
 <label class="form-label">当前版本号</label>
-<input type="text" name="current_version" value="<?php echo h(conf('current_version','1.3.0')); ?>" class="form-control" placeholder="例如：1.2.0">
+<input type="text" name="current_version" value="<?php echo h(conf('current_version','1.4.0')); ?>" class="form-control" placeholder="例如：1.2.0">
 <div class="form-tip">用于与更新服务器比对，检测到新版本时会在后台提示</div>
 </div>
 <div class="form-group">
@@ -1264,177 +1681,8 @@ document.getElementById('themeInput').value=name;
 </script>
 <?php endif; ?>
 
-<!-- 服务器管理 -->
-<?php if($page==='servers'): ?>
-<div class="card">
-<div class="card-header">
-<h3 class="card-title"><i class="fas fa-plus-circle"></i> 添加MNBT服务器</h3>
-</div>
-<form method="post" class="form-row">
-<input type="hidden" name="action" value="add_server">
-<div class="form-group" style="flex:1.5">
-<label class="form-label">服务器名称</label>
-<input type="text" name="name" required class="form-control" placeholder="如：香港节点">
-</div>
-<div class="form-group" style="flex:2">
-<label class="form-label">API地址</label>
-<input type="text" name="api_url" required class="form-control" placeholder="http://xxx/api/api.php">
-</div>
-<div class="form-group">
-<label class="form-label">宝塔编号 (mn_bh)</label>
-<input type="text" name="mn_bh" class="form-control">
-</div>
-<div class="form-group">
-<label class="form-label">API秘钥 (mn_key)</label>
-<input type="text" name="mn_key" class="form-control">
-</div>
-<div class="form-group">
-<label class="form-label">宝塔调用秘钥 (mn_keye)</label>
-<input type="text" name="mn_keye" class="form-control">
-</div>
-<div class="form-group" style="flex:0.5">
-<label class="form-label">插件版本 (mn_vs)</label>
-<input type="text" name="mn_vs" value="16" class="form-control">
-</div>
-<div style="display:flex;align-items:flex-end">
-<button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> 添加</button>
-</div>
-</form>
-</div>
-
-<div class="card">
-<div class="card-header">
-<h3 class="card-title"><i class="fas fa-server"></i> 服务器列表</h3>
-</div>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr>
-<th>ID</th>
-<th>名称</th>
-<th>API地址</th>
-<th>宝塔编号</th>
-<th>VS</th>
-<th>状态</th>
-<th>操作</th>
-</tr>
-</thead>
-<tbody>
-<?php try { $servers=$DB->query("SELECT * FROM mnbt_servers ORDER BY sort_order,id")->fetchAll(); } catch(Exception $e) { $servers=[]; } foreach($servers as $srv): ?>
-<tr>
-<td><?php echo $srv['id']; ?></td>
-<td><strong><?php echo h($srv['name']); ?></strong></td>
-<td style="font-size:.85rem;color:var(--gray-500)"><?php echo h($srv['api_url']); ?></td>
-<td><?php echo h($srv['mn_bh']); ?></td>
-<td><?php echo h($srv['mn_vs']); ?></td>
-<td>
-<?php if($srv['status']): ?>
-<span class="badge badge-success"><i class="fas fa-check"></i> 启用</span>
-<?php else: ?>
-<span class="badge badge-danger"><i class="fas fa-times"></i> 禁用</span>
-<?php endif; ?>
-</td>
-<td>
-<button type="button" class="btn btn-sm btn-outline" onclick="editServer(<?php echo htmlspecialchars(json_encode($srv), ENT_QUOTES, 'UTF-8'); ?>)"><i class="fas fa-edit"></i> 编辑</button>
-<form method="post" style="display:inline">
-<input type="hidden" name="action" value="test_server">
-<input type="hidden" name="id" value="<?php echo $srv['id']; ?>">
-<button type="submit" class="btn btn-sm btn-outline"><i class="fas fa-plug"></i> 测试</button>
-</form>
-<form method="post" style="display:inline">
-<input type="hidden" name="action" value="toggle_server">
-<input type="hidden" name="id" value="<?php echo $srv['id']; ?>">
-<input type="hidden" name="status" value="<?php echo $srv['status']?0:1; ?>">
-<button type="submit" class="btn btn-sm <?php echo $srv['status']?'btn-outline':'btn-success'; ?>">
-<?php echo $srv['status']?'禁用':'启用'; ?>
-</button>
-</form>
-<form method="post" style="display:inline" onsubmit="return confirm('确定删除此服务器？已绑定此服务器的型号将回退到默认配置')">
-<input type="hidden" name="action" value="del_server">
-<input type="hidden" name="id" value="<?php echo $srv['id']; ?>">
-<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
-</form>
-</td>
-</tr>
-<?php endforeach; ?>
-<?php if(empty($servers)): ?>
-<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--gray-500)">
-<i class="fas fa-inbox" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>
-暂无服务器，未配置服务器的型号将使用「系统配置」中的默认MNBT配置
-</td></tr>
-<?php endif; ?>
-</tbody>
-</table>
-</div>
-</div>
-
-<!-- 编辑服务器弹窗 -->
-<div id="editServerOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9999;backdrop-filter:blur(4px)" onclick="closeEditServer()"></div>
-<div id="editServerModal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10000;width:500px;max-width:92vw;background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
-<div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200)">
-<h3 style="margin:0;font-size:1.15rem"><i class="fas fa-edit" style="color:var(--primary-solid);margin-right:8px"></i>编辑服务器</h3>
-<button type="button" onclick="closeEditServer()" style="background:none;border:none;font-size:1.6rem;cursor:pointer;color:var(--gray-500);line-height:1">&times;</button>
-</div>
-<form method="post" style="padding:20px 24px">
-<input type="hidden" name="action" value="edit_server">
-<input type="hidden" name="id" id="editSrvId">
-<div class="form-group" style="margin-bottom:16px">
-<label class="form-label">服务器名称</label>
-<input type="text" name="name" id="editSrvName" required class="form-control">
-</div>
-<div class="form-group" style="margin-bottom:16px">
-<label class="form-label">API地址</label>
-<input type="text" name="api_url" id="editSrvApiUrl" required class="form-control" placeholder="http://xxx/api/api.php">
-</div>
-<div class="form-row" style="margin-bottom:16px">
-<div class="form-group">
-<label class="form-label">宝塔编号 (mn_bh)</label>
-<input type="text" name="mn_bh" id="editSrvBh" class="form-control">
-</div>
-<div class="form-group">
-<label class="form-label">API秘钥 (mn_key)</label>
-<input type="text" name="mn_key" id="editSrvKey" class="form-control">
-</div>
-</div>
-<div class="form-row" style="margin-bottom:16px">
-<div class="form-group">
-<label class="form-label">宝塔调用秘钥 (mn_keye)</label>
-<input type="text" name="mn_keye" id="editSrvKeye" class="form-control">
-</div>
-<div class="form-group" style="flex:0.5">
-<label class="form-label">插件版本 (mn_vs)</label>
-<input type="text" name="mn_vs" id="editSrvVs" value="16" class="form-control">
-</div>
-</div>
-<div style="display:flex;gap:10px;justify-content:flex-end">
-<button type="button" class="btn btn-outline" onclick="closeEditServer()">取消</button>
-<button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存修改</button>
-</div>
-</form>
-</div>
-<script>
-function editServer(srv){
-    document.getElementById('editSrvId').value = srv.id;
-    document.getElementById('editSrvName').value = srv.name;
-    document.getElementById('editSrvApiUrl').value = srv.api_url;
-    document.getElementById('editSrvBh').value = srv.mn_bh;
-    document.getElementById('editSrvKey').value = srv.mn_key;
-    document.getElementById('editSrvKeye').value = srv.mn_keye;
-    document.getElementById('editSrvVs').value = srv.mn_vs;
-    document.getElementById('editServerOverlay').style.display = 'block';
-    document.getElementById('editServerModal').style.display = 'block';
-    document.body.style.overflow = 'hidden';
-}
-function closeEditServer(){
-    document.getElementById('editServerOverlay').style.display = 'none';
-    document.getElementById('editServerModal').style.display = 'none';
-    document.body.style.overflow = '';
-}
-</script>
-<?php endif; ?>
-
-<!-- 分类管理 -->
-<?php if($page==='vhost_categories'):
+<!-- 商品设置 -->
+<?php if($page==='product'):
 $cats = $DB->query("SELECT * FROM vhost_categories ORDER BY level, sort_order, id")->fetchAll();
 $catTree = [];
 foreach($cats as $c) {
@@ -1453,6 +1701,7 @@ $level1 = array_filter($catTree, function($c){ return $c['level'] == 1; });
 <h3 class="card-title"><i class="fas fa-plus-circle"></i> 添加一级分类</h3>
 </div>
 <form method="post" class="form-row">
+<?php echo csrfField(); ?>
 <input type="hidden" name="action" value="add_category">
 <input type="hidden" name="parent_id" value="">
 <div class="form-group" style="flex:2">
@@ -1491,6 +1740,7 @@ function renderCatRow($cat, $depth = 0) {
     <td><?php echo $cat['sort_order']; ?></td>
     <td style="max-width:300px">
     <form method="post" class="form-row" style="margin:0;gap:6px">
+    <?php echo csrfField(); ?>
     <input type="hidden" name="action" value="edit_category">
     <input type="hidden" name="id" value="<?php echo $cat['id']; ?>">
     <input type="text" name="name" value="<?php echo h($cat['name']); ?>" class="form-control" style="flex:1;padding:6px 10px;font-size:.85rem">
@@ -1503,6 +1753,7 @@ function renderCatRow($cat, $depth = 0) {
     <button type="button" class="btn btn-sm btn-outline" onclick="showAddChild(<?php echo $cat['id']; ?>,'<?php echo h(addslashes($cat['name'])); ?>',<?php echo $cat['level']+1; ?>)"><i class="fas fa-plus"></i> 子分类</button>
     <?php endif; ?>
     <form method="post" style="display:inline" onsubmit="return confirm('确定删除此分类？')">
+    <?php echo csrfField(); ?>
     <input type="hidden" name="action" value="del_category">
     <input type="hidden" name="id" value="<?php echo $cat['id']; ?>">
     <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
@@ -1538,6 +1789,7 @@ if(empty($level1)): ?>
 <button type="button" onclick="closeAddChild()" style="background:none;border:none;font-size:1.6rem;cursor:pointer;color:var(--gray-500);line-height:1">&times;</button>
 </div>
 <form method="post" style="padding:20px 24px">
+<?php echo csrfField(); ?>
 <input type="hidden" name="action" value="add_category">
 <input type="hidden" name="parent_id" id="addChildParentId">
 <div class="form-group" style="margin-bottom:16px">
@@ -1572,10 +1824,9 @@ function closeAddChild() {
     document.body.style.overflow = '';
 }
 </script>
-<?php endif; ?>
 
 <!-- 主机型号 -->
-<?php if($page==='vhost_models'):
+<?php
 // 编辑模式：加载已有型号数据
 $editingModel = null;
 if (isset($_GET['edit_model'])) {
@@ -1606,10 +1857,11 @@ if (isset($_GET['edit_model'])) {
 <div class="card-header">
 <h3 class="card-title"><i class="fas <?php echo $editingModel?'fa-edit':'fa-plus-circle'; ?>"></i> <?php echo $editingModel?'编辑型号':'添加型号'; ?></h3>
 <?php if ($editingModel): ?>
-<a href="?page=vhost_models" class="btn btn-sm btn-outline"><i class="fas fa-times"></i> 取消编辑</a>
+<a href="?page=product" class="btn btn-sm btn-outline"><i class="fas fa-times"></i> 取消编辑</a>
 <?php endif; ?>
 </div>
 <form method="post" class="form-row">
+<?php echo csrfField(); ?>
 <input type="hidden" name="action" value="<?php echo $editingModel?'edit_model':'add_model'; ?>">
 <?php if ($editingModel): ?><input type="hidden" name="id" value="<?php echo $editingModel['id']; ?>"><?php endif; ?>
 <?php
@@ -1817,8 +2069,9 @@ if ($maxPerUser > 0) {
 <?php endif; ?>
 </td>
 <td>
-<a href="?page=vhost_models&edit_model=<?php echo $m['id']; ?>" class="btn btn-sm btn-primary"><i class="fas fa-edit"></i> 编辑</a>
+<a href="?page=product&edit_model=<?php echo $m['id']; ?>" class="btn btn-sm btn-primary"><i class="fas fa-edit"></i> 编辑</a>
 <form method="post" style="display:inline">
+<?php echo csrfField(); ?>
 <input type="hidden" name="action" value="toggle_model">
 <input type="hidden" name="id" value="<?php echo $m['id']; ?>">
 <input type="hidden" name="status" value="<?php echo $m['status']?0:1; ?>">
@@ -1827,6 +2080,7 @@ if ($maxPerUser > 0) {
 </button>
 </form>
 <form method="post" style="display:inline" onsubmit="return confirm('确定删除？')">
+<?php echo csrfField(); ?>
 <input type="hidden" name="action" value="del_model">
 <input type="hidden" name="id" value="<?php echo $m['id']; ?>">
 <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
@@ -1846,20 +2100,22 @@ if ($maxPerUser > 0) {
 </div>
 <?php endif; ?>
 
-<!-- 虚拟主机 -->
-<?php if($page==='vhosts'): ?>
+<!-- 虚拟主机/用户管理 -->
+<?php if($page==='users_instances'): ?>
+<?php if($subPage === 'vhosts' || !$subPage): ?>
 <div class="card">
 <div class="card-header">
 <h3 class="card-title"><i class="fas fa-search"></i> 搜索筛选</h3>
 </div>
 <form method="get" class="search-box">
-<input type="hidden" name="page" value="vhosts">
+<input type="hidden" name="page" value="users_instances">
+<input type="hidden" name="sub" value="vhosts">
 <div class="search-input">
 <i class="fas fa-search"></i>
 <input type="text" name="search" value="<?php echo h($_GET['search'] ?? ''); ?>" class="form-control" placeholder="搜索账号、邮箱或型号...">
 </div>
 <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> 搜索</button>
-<a href="?page=vhosts" class="btn btn-outline"><i class="fas fa-redo"></i> 重置</a>
+<a href="?page=users_instances&sub=vhosts" class="btn btn-outline"><i class="fas fa-redo"></i> 重置</a>
 </form>
 </div>
 
@@ -1871,6 +2127,7 @@ if ($maxPerUser > 0) {
 </div>
 
 <form method="post" id="vhostBatchForm" onsubmit="return confirm('确定执行批量操作？')">
+<?php echo csrfField(); ?>
 <input type="hidden" name="action" value="del_vhost_batch" id="vhostBatchAction">
 <input type="hidden" name="ids" id="vhostBatchIds">
 </form>
@@ -1934,6 +2191,7 @@ foreach($vhosts as $v): if(!isset($v['server_name'])) $v['server_name']=null; ?>
 <td><?php echo $v['expire_time']?date('Y-m-d',strtotime($v['expire_time'])):'永久'; ?></td>
 <td>
 <form method="post" style="display:inline" onsubmit="return confirm('确定删除此主机？将同时从MNBT删除')">
+<?php echo csrfField(); ?>
 <input type="hidden" name="action" value="del_vhost">
 <input type="hidden" name="id" value="<?php echo $v['id']; ?>">
 <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
@@ -1966,21 +2224,20 @@ document.getElementById('vhostBatchForm').submit();
 }
 </script>
 <?php endif; ?>
-
-<!-- 用户管理 -->
-<?php if($page==='users'): ?>
+<?php if($subPage === 'users'): ?>
 <div class="card">
 <div class="card-header">
 <h3 class="card-title"><i class="fas fa-search"></i> 搜索筛选</h3>
 </div>
 <form method="get" class="search-box">
-<input type="hidden" name="page" value="users">
+<input type="hidden" name="page" value="users_instances">
+<input type="hidden" name="sub" value="users">
 <div class="search-input">
 <i class="fas fa-search"></i>
 <input type="text" name="search" value="<?php echo h($_GET['search'] ?? ''); ?>" class="form-control" placeholder="搜索邮箱或昵称...">
 </div>
 <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> 搜索</button>
-<a href="?page=users" class="btn btn-outline"><i class="fas fa-redo"></i> 重置</a>
+<a href="?page=users_instances&sub=users" class="btn btn-outline"><i class="fas fa-redo"></i> 重置</a>
 </form>
 </div>
 
@@ -1997,6 +2254,7 @@ document.getElementById('vhostBatchForm').submit();
 </div>
 
 <form method="post" id="batchForm" onsubmit="return confirm('确定执行批量操作？')">
+<?php echo csrfField(); ?>
 <input type="hidden" name="action" value="del_user_batch" id="batchAction">
 <input type="hidden" name="ids" id="batchIds">
 </form>
@@ -2058,6 +2316,7 @@ foreach($users as $u):
 <td>
 <button type="button" class="btn btn-sm btn-primary" onclick="openEditUserModal(<?php echo htmlspecialchars(json_encode(['id'=>$u['id'],'email'=>$u['email'],'nickname'=>$u['nickname'],'points'=>$u['points']])); ?>)"><i class="fas fa-edit"></i></button>
 <form method="post" style="display:inline" onsubmit="return confirm('确定删除此用户？')">
+<?php echo csrfField(); ?>
 <input type="hidden" name="action" value="del_user">
 <input type="hidden" name="id" value="<?php echo $u['id']; ?>">
 <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
@@ -2129,10 +2388,11 @@ document.addEventListener('click', function(e) {
 <div id="editModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10000;justify-content:center;align-items:center">
 <div style="background:#fff;border-radius:16px;width:90%;max-width:480px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.15)">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #eee">
-<h3 style="margin:0;font-size:1.2rem"><i class="fas fa-user-edit" style="color:#667eea"></i> 编辑用户</h3>
+<h3 style="margin:0;font-size:1.2rem"><i class="fas fa-user-edit" style="color:#10b981"></i> 编辑用户</h3>
 <button type="button" onclick="closeEditModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#999">&times;</button>
 </div>
 <form method="post" id="editUserForm">
+<?php echo csrfField(); ?>
 <input type="hidden" name="action" value="edit_user">
 <input type="hidden" name="id" id="edit_user_id">
 
@@ -2164,10 +2424,105 @@ document.addEventListener('click', function(e) {
 </div>
 </div>
 <?php endif; ?>
+<?php endif; ?>
 
-<!-- 价格设置 -->
-<?php if($page==='prices'): ?>
-<form method="post"><input type="hidden" name="action" value="save_config">
+<!-- 定价与优惠 -->
+<?php if($page==='pricing'): ?>
+<?php if($subPage === 'pricing_main' || !$subPage): ?>
+<?php
+$pkgEdit = null;
+if (isset($_GET['edit'])) {
+    $stmt = $DB->prepare("SELECT * FROM recharge_packages WHERE id=?");
+    $stmt->execute([intval($_GET['edit'])]);
+    $pkgEdit = $stmt->fetch();
+}
+$pkgList = $DB->query("SELECT * FROM recharge_packages ORDER BY sort_order,id")->fetchAll();
+?>
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-coins"></i> 充值套餐管理</h3>
+</div>
+<form method="post" class="form-row">
+<?php echo csrfField(); ?>
+<input type="hidden" name="action" value="<?php echo $pkgEdit ? 'edit_recharge_package' : 'add_recharge_package'; ?>">
+<?php if ($pkgEdit): ?><input type="hidden" name="id" value="<?php echo $pkgEdit['id']; ?>"><?php endif; ?>
+<div class="form-group">
+<label class="form-label">积分数量</label>
+<input type="number" name="points" min="1" required class="form-control" value="<?php echo $pkgEdit ? $pkgEdit['points'] : ''; ?>" placeholder="如 500">
+</div>
+<div class="form-group">
+<label class="form-label">价格（元）</label>
+<input type="number" step="0.01" name="price" min="0.01" required class="form-control" value="<?php echo $pkgEdit ? $pkgEdit['price'] : ''; ?>" placeholder="如 20">
+</div>
+<div class="form-group">
+<label class="form-label">排序 <span style="color:var(--gray-500);font-weight:normal">(越小越靠前)</span></label>
+<input type="number" name="sort_order" class="form-control" value="<?php echo $pkgEdit ? $pkgEdit['sort_order'] : '0'; ?>">
+</div>
+<div style="display:flex;align-items:flex-end;gap:10px">
+<button type="submit" class="btn btn-primary"><i class="fas fa-<?php echo $pkgEdit ? 'save' : 'plus'; ?>"></i> <?php echo $pkgEdit ? '保存修改' : '添加套餐'; ?></button>
+<?php if ($pkgEdit): ?><a href="?page=pricing&sub=pricing_main" class="btn btn-outline">取消</a><?php endif; ?>
+</div>
+</form>
+</div>
+
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-list"></i> 套餐列表</h3>
+</div>
+<div class="table-wrapper">
+<table>
+<thead><tr><th>积分</th><th>价格</th><th>排序</th><th>状态</th><th>操作</th></tr></thead>
+<tbody>
+<?php if(empty($pkgList)): ?>
+<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--gray-400)"><i class="fas fa-coins" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>暂无套餐，请在上方添加</td></tr>
+<?php else: foreach($pkgList as $p): ?>
+<tr>
+<td><?php echo number_format($p['points']); ?></td>
+<td>¥<?php echo $p['price']; ?></td>
+<td><?php echo $p['sort_order']; ?></td>
+<td><span class="badge <?php echo $p['status'] ? 'badge-success' : 'badge-gray'; ?>"><?php echo $p['status'] ? '上架' : '下架'; ?></span></td>
+<td>
+<a href="?page=pricing&sub=pricing_main&edit=<?php echo $p['id']; ?>" class="btn btn-sm btn-primary"><i class="fas fa-edit"></i> 编辑</a>
+<form method="post" style="display:inline">
+<?php echo csrfField(); ?>
+<input type="hidden" name="action" value="toggle_recharge_package">
+<input type="hidden" name="id" value="<?php echo $p['id']; ?>">
+<input type="hidden" name="status" value="<?php echo $p['status'] ? 0 : 1; ?>">
+<button type="submit" class="btn btn-sm <?php echo $p['status'] ? 'btn-outline' : 'btn-success'; ?>"><?php echo $p['status'] ? '下架' : '上架'; ?></button>
+</form>
+<form method="post" style="display:inline" onsubmit="return confirm('确定删除？')">
+<?php echo csrfField(); ?>
+<input type="hidden" name="action" value="del_recharge_package">
+<input type="hidden" name="id" value="<?php echo $p['id']; ?>">
+<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+</form>
+</td>
+</tr>
+<?php endforeach; endif; ?>
+</tbody>
+</table>
+</div>
+</div>
+
+<form method="post"><?php echo csrfField(); ?><input type="hidden" name="action" value="save_config">
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-ban"></i> 购买限制</h3>
+</div>
+<div class="form-row">
+<div class="form-group">
+<label class="form-label">每用户最多购买主机数</label>
+<input type="number" name="max_hosts_per_user" value="<?php echo h(conf('max_hosts_per_user','5')); ?>" min="1" class="form-control">
+<p class="form-hint">全局限制：每个用户最多可购买的主机总数（0=不限）。各型号还可在"主机型号"中单独设置限量</p>
+</div>
+</div>
+</div>
+<button type="submit" class="btn btn-primary" style="margin-top:8px"><i class="fas fa-save"></i> 保存设置</button>
+</form>
+<?php endif; ?>
+
+<?php if($subPage === 'promotions'): ?>
+<form method="post"><?php echo csrfField(); ?><input type="hidden" name="action" value="save_config">
 
 <div class="card">
 <div class="card-header">
@@ -2225,7 +2580,7 @@ document.addEventListener('click', function(e) {
 <p class="form-hint">推荐人成功邀请1位好友注册获得的积分奖励</p>
 </div>
 </div>
-<div style="background:linear-gradient(135deg,#667eea22,#764ba222);padding:16px;border-radius:12px;margin-top:12px">
+<div style="background:linear-gradient(135deg,#10b98122,#05966922);padding:16px;border-radius:12px;margin-top:12px">
 <p style="color:var(--gray-700);font-size:.9rem;margin-bottom:8px"><i class="fas fa-info-circle"></i> 推荐奖励规则：</p>
 <ul style="color:var(--gray-600);font-size:.85rem;padding-left:20px;line-height:1.8">
 <li>被推荐人注册时输入推荐码，双方都可获得奖励积分</li>
@@ -2235,237 +2590,10 @@ document.addEventListener('click', function(e) {
 </div>
 </div>
 
-<div class="card">
-<div class="card-header">
-<h3 class="card-title"><i class="fas fa-ban"></i> 购买限制</h3>
-</div>
-<div class="form-row">
-<div class="form-group">
-<label class="form-label">每用户最多购买主机数</label>
-<input type="number" name="max_hosts_per_user" value="<?php echo h(conf('max_hosts_per_user','5')); ?>" min="1" class="form-control">
-<p class="form-hint">全局限制：每个用户最多可购买的主机总数（0=不限）。各型号还可在"主机型号"中单独设置限量</p>
-</div>
-</div>
-</div>
+<button type="submit" class="btn btn-primary" style="margin-top:8px"><i class="fas fa-save"></i> 保存优惠设置</button>
+</form>
 
-<button type="submit" class="btn btn-primary" style="margin-top:8px"><i class="fas fa-save"></i> 保存价格设置</button>
-</form>
-<?php endif; ?>
-
-<!-- 充值套餐管理 -->
-<?php if($page==='recharge_packages'):
-$pkgEdit = null;
-if (isset($_GET['edit'])) {
-    $stmt = $DB->prepare("SELECT * FROM recharge_packages WHERE id=?");
-    $stmt->execute([intval($_GET['edit'])]);
-    $pkgEdit = $stmt->fetch();
-}
-$pkgList = $DB->query("SELECT * FROM recharge_packages ORDER BY sort_order,id")->fetchAll();
-?>
-<div class="card">
-<div class="card-header">
-<h3 class="card-title"><i class="fas fa-coins"></i> 充值套餐管理</h3>
-</div>
-<form method="post" class="form-row">
-<input type="hidden" name="action" value="<?php echo $pkgEdit ? 'edit_recharge_package' : 'add_recharge_package'; ?>">
-<?php if ($pkgEdit): ?><input type="hidden" name="id" value="<?php echo $pkgEdit['id']; ?>"><?php endif; ?>
-<div class="form-group">
-<label class="form-label">积分数量</label>
-<input type="number" name="points" min="1" required class="form-control" value="<?php echo $pkgEdit ? $pkgEdit['points'] : ''; ?>" placeholder="如 500">
-</div>
-<div class="form-group">
-<label class="form-label">价格（元）</label>
-<input type="number" step="0.01" name="price" min="0.01" required class="form-control" value="<?php echo $pkgEdit ? $pkgEdit['price'] : ''; ?>" placeholder="如 20">
-</div>
-<div class="form-group">
-<label class="form-label">排序 <span style="color:var(--gray-500);font-weight:normal">(越小越靠前)</span></label>
-<input type="number" name="sort_order" class="form-control" value="<?php echo $pkgEdit ? $pkgEdit['sort_order'] : '0'; ?>">
-</div>
-<div style="display:flex;align-items:flex-end;gap:10px">
-<button type="submit" class="btn btn-primary"><i class="fas fa-<?php echo $pkgEdit ? 'save' : 'plus'; ?>"></i> <?php echo $pkgEdit ? '保存修改' : '添加套餐'; ?></button>
-<?php if ($pkgEdit): ?><a href="?page=recharge_packages" class="btn btn-outline">取消</a><?php endif; ?>
-</div>
-</form>
-</div>
-
-<div class="card">
-<div class="card-header">
-<h3 class="card-title"><i class="fas fa-list"></i> 套餐列表</h3>
-</div>
-<div class="table-wrapper">
-<table>
-<thead><tr><th>积分</th><th>价格</th><th>排序</th><th>状态</th><th>操作</th></tr></thead>
-<tbody>
-<?php if(empty($pkgList)): ?>
-<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--gray-400)"><i class="fas fa-coins" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>暂无套餐，请在上方添加</td></tr>
-<?php else: foreach($pkgList as $p): ?>
-<tr>
-<td><?php echo number_format($p['points']); ?></td>
-<td>¥<?php echo $p['price']; ?></td>
-<td><?php echo $p['sort_order']; ?></td>
-<td><span class="badge <?php echo $p['status'] ? 'badge-success' : 'badge-gray'; ?>"><?php echo $p['status'] ? '上架' : '下架'; ?></span></td>
-<td>
-<a href="?page=recharge_packages&edit=<?php echo $p['id']; ?>" class="btn btn-sm btn-primary"><i class="fas fa-edit"></i> 编辑</a>
-<form method="post" style="display:inline">
-<input type="hidden" name="action" value="toggle_recharge_package">
-<input type="hidden" name="id" value="<?php echo $p['id']; ?>">
-<input type="hidden" name="status" value="<?php echo $p['status'] ? 0 : 1; ?>">
-<button type="submit" class="btn btn-sm <?php echo $p['status'] ? 'btn-outline' : 'btn-success'; ?>"><?php echo $p['status'] ? '下架' : '上架'; ?></button>
-</form>
-<form method="post" style="display:inline" onsubmit="return confirm('确定删除？')">
-<input type="hidden" name="action" value="del_recharge_package">
-<input type="hidden" name="id" value="<?php echo $p['id']; ?>">
-<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
-</form>
-</td>
-</tr>
-<?php endforeach; endif; ?>
-</tbody>
-</table>
-</div>
-</div>
-<?php endif; ?>
-
-<!-- 工单管理 -->
-<?php if($page==='tickets'):
-$tkFilter = $_GET['filter'] ?? 'all';
-$tkWhere = '';
-if ($tkFilter === 'pending') $tkWhere = 'WHERE t.status=0';
-elseif ($tkFilter === 'replied') $tkWhere = 'WHERE t.status=1';
-elseif ($tkFilter === 'closed') $tkWhere = 'WHERE t.status=2';
-
-try {
-    $tkList = $DB->query("SELECT t.*, u.email as user_email, u.nickname as user_nickname, vm.name as model_name, vh.account as vhost_account FROM tickets t LEFT JOIN users u ON t.user_id=u.id LEFT JOIN vhosts vh ON t.vhost_id=vh.id LEFT JOIN vhost_models vm ON vh.model_id=vm.id {$tkWhere} ORDER BY t.updated_at DESC")->fetchAll();
-} catch (Exception $e) { $tkList = []; }
-$tkPending = $DB->query("SELECT COUNT(*) as c FROM tickets WHERE status=0")->fetch()['c'] ?? 0;
-$tkStatusMap = [0=>'待处理',1=>'已回复',2=>'已关闭'];
-$tkStatusBadge = [0=>'badge-warning',1=>'badge-success',2=>'badge-gray'];
-
-$viewTicket = isset($_GET['view']) ? intval($_GET['view']) : 0;
-if ($viewTicket > 0):
-    try {
-        $stmt = $DB->prepare("SELECT t.*, u.email as user_email, u.nickname as user_nickname, vm.name as model_name, vh.account as vhost_account FROM tickets t LEFT JOIN users u ON t.user_id=u.id LEFT JOIN vhosts vh ON t.vhost_id=vh.id LEFT JOIN vhost_models vm ON vh.model_id=vm.id WHERE t.id=?");
-        $stmt->execute([$viewTicket]);
-        $vd = $stmt->fetch();
-    } catch (Exception $e) { $vd = false; }
-    if ($vd):
-        try {
-            $vdReplies = $DB->prepare("SELECT tr.*, u.nickname as user_nickname, a.username as admin_username FROM ticket_replies tr LEFT JOIN users u ON tr.user_id=u.id LEFT JOIN admins a ON tr.admin_id=a.id WHERE tr.ticket_id=? ORDER BY tr.created_at ASC");
-            $vdReplies->execute([$viewTicket]);
-            $vdReplyList = $vdReplies->fetchAll();
-        } catch (Exception $e) { $vdReplyList = []; }
-        $vdStatus = isset($vd['status']) ? intval($vd['status']) : 0;
-?>
-<div class="card">
-<div class="card-header">
-<h3 class="card-title"><i class="fas fa-headset"></i> 工单 #<?php echo $vd['id']; ?> 详情</h3>
-<a href="?page=tickets&filter=<?php echo $tkFilter; ?>" class="btn btn-sm btn-outline"><i class="fas fa-arrow-left"></i> 返回列表</a>
-</div>
-<div style="padding:16px 0">
-<div style="margin-bottom:16px">
-<span class="badge badge-lg <?php echo $tkStatusBadge[$vdStatus]; ?>"><?php echo $tkStatusMap[$vdStatus]; ?></span>
-</div>
-<div style="margin-bottom:8px"><strong>标题：</strong><?php echo h($vd['subject'] ?? '(无标题)'); ?></div>
-<div style="margin-bottom:8px;font-size:.9rem;color:var(--gray-500)">
-<strong>提交人：</strong><?php echo h($vd['user_nickname'] ?: $vd['user_email']); ?> &nbsp;|&nbsp;
-<strong>时间：</strong><?php echo $vd['created_at']; ?>
-<?php if ($vd['vhost_account']): ?>
-&nbsp;|&nbsp; <strong>关联主机：</strong><?php echo h($vd['model_name'].' - '.$vd['vhost_account']); ?>
-<?php endif; ?>
-</div>
-</div>
-<div style="border-top:1px solid var(--border-color);padding-top:16px">
-<?php foreach($vdReplyList as $r): $isAdminR = !empty($r['admin_id']); ?>
-<div style="margin-bottom:16px;padding:14px 16px;border-radius:10px;<?php echo $isAdminR ? 'background:linear-gradient(135deg,rgba(102,126,234,.08),rgba(118,75,162,.08));border-left:3px solid #667eea' : 'background:var(--gray-50);border-left:3px solid #10b981' ?>">
-<div style="display:flex;justify-content:space-between;margin-bottom:6px">
-<span style="font-weight:600;font-size:.9rem"><?php echo $isAdminR ? '<i class="fas fa-user-shield"></i> 管理员 ('.h($r['admin_username']).')' : '<i class="fas fa-user"></i> '.h($r['user_nickname'] ?: '用户'); ?></span>
-<span style="font-size:.8rem;color:var(--gray-400)"><?php echo $r['created_at']; ?></span>
-</div>
-<div style="font-size:.9rem;line-height:1.7;word-break:break-all"><?php echo nl2br(h($r['content'])); ?></div>
-</div>
-<?php endforeach; ?>
-</div>
-<?php if ($vdStatus != 2): ?>
-<div style="border-top:1px solid var(--border-color);padding-top:16px;margin-top:8px">
-<form method="post">
-<input type="hidden" name="action" value="admin_reply_ticket">
-<input type="hidden" name="ticket_id" value="<?php echo $vd['id']; ?>">
-<div class="form-group">
-<label class="form-label">管理员回复</label>
-<textarea name="content" rows="4" required class="form-control" placeholder="输入回复内容..."></textarea>
-</div>
-<div style="display:flex;gap:10px">
-<button type="submit" class="btn btn-primary"><i class="fas fa-reply"></i> 回复</button>
-<button type="submit" name="action" value="close_ticket" class="btn btn-danger" onclick="return confirm('确定关闭此工单？')"><i class="fas fa-times-circle"></i> 回复并关闭</button>
-</div>
-</form>
-</div>
-<?php else: ?>
-<div style="text-align:center;padding:16px;color:var(--gray-400);border-top:1px solid var(--border-color);margin-top:8px">
-<i class="fas fa-lock" style="margin-right:6px"></i>此工单已关闭
-<form method="post" style="display:inline;margin-left:12px" onsubmit="return confirm('确定删除此工单？')">
-<input type="hidden" name="action" value="del_ticket">
-<input type="hidden" name="id" value="<?php echo $vd['id']; ?>">
-<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i> 删除</button>
-</form>
-</div>
-<?php endif; ?>
-</div>
-<?php else: ?>
-<div class="card"><div class="card-header"><h3>工单不存在</h3></div><p style="padding:20px;color:var(--gray-400)"><a href="?page=tickets">返回列表</a></p></div>
-<?php endif; ?>
-<?php else: ?>
-<div class="card">
-<div class="card-header">
-<h3 class="card-title"><i class="fas fa-headset"></i> 工单管理</h3>
-<div style="display:flex;gap:6px;flex-wrap:wrap">
-<a href="?page=tickets&filter=all" class="btn btn-sm <?php echo $tkFilter==='all'?'btn-primary':'btn-outline'; ?>">全部</a>
-<a href="?page=tickets&filter=pending" class="btn btn-sm <?php echo $tkFilter==='pending'?'btn-warning':'btn-outline'; ?>">待处理 <?php if($tkPending>0) echo "({$tkPending})"; ?></a>
-<a href="?page=tickets&filter=replied" class="btn btn-sm <?php echo $tkFilter==='replied'?'btn-success':'btn-outline'; ?>">已回复</a>
-<a href="?page=tickets&filter=closed" class="btn btn-sm <?php echo $tkFilter==='closed'?'btn-outline':'btn-outline'; ?>">已关闭</a>
-</div>
-</div>
-<div class="table-wrapper">
-<table>
-<thead><tr><th>ID</th><th>标题</th><th>提交人</th><th>关联主机</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead>
-<tbody>
-<?php if(empty($tkList)): ?>
-<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--gray-400)"><i class="fas fa-headset" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>暂无工单</td></tr>
-<?php else: foreach($tkList as $tk): ?>
-<tr>
-<td>#<?php echo $tk['id']; ?></td>
-<td><?php echo h($tk['subject']); ?></td>
-<td><?php echo h($tk['user_nickname'] ?: substr($tk['user_email'],0,3).'***'); ?></td>
-<td><?php echo $tk['vhost_account'] ? h($tk['model_name'].' - '.$tk['vhost_account']) : '<span style="color:var(--gray-400)">-</span>'; ?></td>
-<td><span class="badge <?php echo $tkStatusBadge[$tk['status']]; ?>"><?php echo $tkStatusMap[$tk['status']]; ?></span></td>
-<td style="font-size:.85rem;color:var(--gray-400)"><?php echo date('Y-m-d H:i', strtotime($tk['updated_at'])); ?></td>
-<td>
-<a href="?page=tickets&view=<?php echo $tk['id']; ?>" class="btn btn-sm btn-primary"><i class="fas fa-eye"></i> 查看</a>
-<?php if($tk['status']!=2): ?>
-<form method="post" style="display:inline" onsubmit="return confirm('确定关闭？')">
-<input type="hidden" name="action" value="close_ticket">
-<input type="hidden" name="ticket_id" value="<?php echo $tk['id']; ?>">
-<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-times"></i></button>
-</form>
-<?php endif; ?>
-<form method="post" style="display:inline" onsubmit="return confirm('确定删除？')">
-<input type="hidden" name="action" value="del_ticket">
-<input type="hidden" name="id" value="<?php echo $tk['id']; ?>">
-<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
-</form>
-</td>
-</tr>
-<?php endforeach; endif; ?>
-</tbody>
-</table>
-</div>
-</div>
-<?php endif; ?>
-<?php endif; ?>
-
-<!-- 优惠码管理 -->
-<?php if($page==='coupons'): ?>
-<div class="tabs">
+<div class="tabs" style="margin-top:20px">
 <a class="tab active" onclick="showCouponTab('tab-add')"><i class="fas fa-plus-circle"></i> 添加优惠码</a>
 <a class="tab" onclick="showCouponTab('tab-batch')"><i class="fas fa-layer-group"></i> 批量生成</a>
 </div>
@@ -2476,6 +2604,7 @@ if ($viewTicket > 0):
 <h3 class="card-title"><i class="fas fa-plus-circle"></i> 添加优惠码</h3>
 </div>
 <form method="post" class="form-row">
+<?php echo csrfField(); ?>
 <input type="hidden" name="action" value="add_coupon">
 <div class="form-group">
 <label class="form-label">优惠码 <span style="color:var(--gray-500);font-weight:normal">(留空自动生成)</span></label>
@@ -2517,6 +2646,7 @@ if ($viewTicket > 0):
 <h3 class="card-title"><i class="fas fa-layer-group"></i> 批量生成优惠码</h3>
 </div>
 <form method="post" class="form-row">
+<?php echo csrfField(); ?>
 <input type="hidden" name="action" value="batch_add_coupon">
 <div class="form-group" style="flex:0.8">
 <label class="form-label">优惠码前缀</label>
@@ -2639,6 +2769,7 @@ foreach($coupons as $c):
 <td style="font-size:.85rem;color:var(--gray-500)"><?php echo date('Y-m-d H:i', strtotime($c['created_at'])); ?></td>
 <td>
 <form method="post" style="display:inline">
+<?php echo csrfField(); ?>
 <input type="hidden" name="action" value="toggle_coupon">
 <input type="hidden" name="id" value="<?php echo $c['id']; ?>">
 <input type="hidden" name="status" value="<?php echo $c['status']?0:1; ?>">
@@ -2647,6 +2778,7 @@ foreach($coupons as $c):
 </button>
 </form>
 <form method="post" style="display:inline" onsubmit="return confirm('确定删除此优惠码？')">
+<?php echo csrfField(); ?>
 <input type="hidden" name="action" value="del_coupon">
 <input type="hidden" name="id" value="<?php echo $c['id']; ?>">
 <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
@@ -2665,10 +2797,173 @@ foreach($coupons as $c):
 </div>
 </div>
 <?php endif; ?>
+<?php endif; ?>
+
+<!-- 工单管理 -->
+<?php if($page==='tickets'):
+$tkFilter = $_GET['filter'] ?? 'all';
+$tkWhere = '';
+if ($tkFilter === 'pending') $tkWhere = 'WHERE t.status=0';
+elseif ($tkFilter === 'replied') $tkWhere = 'WHERE t.status=1';
+elseif ($tkFilter === 'closed') $tkWhere = 'WHERE t.status=2';
+
+try {
+    $tkList = $DB->query("SELECT t.*, u.email as user_email, u.nickname as user_nickname, vm.name as model_name, vh.account as vhost_account FROM tickets t LEFT JOIN users u ON t.user_id=u.id LEFT JOIN vhosts vh ON t.vhost_id=vh.id LEFT JOIN vhost_models vm ON vh.model_id=vm.id {$tkWhere} ORDER BY t.updated_at DESC")->fetchAll();
+} catch (Exception $e) { $tkList = []; }
+$tkPending = $DB->query("SELECT COUNT(*) as c FROM tickets WHERE status=0")->fetch()['c'] ?? 0;
+$tkStatusMap = [0=>'待处理',1=>'已回复',2=>'已关闭'];
+$tkStatusBadge = [0=>'badge-warning',1=>'badge-success',2=>'badge-gray'];
+
+$viewTicket = isset($_GET['view']) ? intval($_GET['view']) : 0;
+if ($viewTicket > 0):
+    try {
+        $stmt = $DB->prepare("SELECT t.*, u.email as user_email, u.nickname as user_nickname, vm.name as model_name, vh.account as vhost_account FROM tickets t LEFT JOIN users u ON t.user_id=u.id LEFT JOIN vhosts vh ON t.vhost_id=vh.id LEFT JOIN vhost_models vm ON vh.model_id=vm.id WHERE t.id=?");
+        $stmt->execute([$viewTicket]);
+        $vd = $stmt->fetch();
+    } catch (Exception $e) { $vd = false; }
+    if ($vd):
+        try {
+            $vdReplies = $DB->prepare("SELECT tr.*, u.nickname as user_nickname, a.username as admin_username FROM ticket_replies tr LEFT JOIN users u ON tr.user_id=u.id LEFT JOIN admins a ON tr.admin_id=a.id WHERE tr.ticket_id=? ORDER BY tr.created_at ASC");
+            $vdReplies->execute([$viewTicket]);
+            $vdReplyList = $vdReplies->fetchAll();
+        } catch (Exception $e) { $vdReplyList = []; }
+        $vdStatus = isset($vd['status']) ? intval($vd['status']) : 0;
+?>
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-headset"></i> 工单 #<?php echo $vd['id']; ?> 详情</h3>
+<a href="?page=tickets&filter=<?php echo $tkFilter; ?>" class="btn btn-sm btn-outline"><i class="fas fa-arrow-left"></i> 返回列表</a>
+</div>
+<div style="padding:16px 0">
+<div style="margin-bottom:16px">
+<span class="badge badge-lg <?php echo $tkStatusBadge[$vdStatus]; ?>"><?php echo $tkStatusMap[$vdStatus]; ?></span>
+</div>
+<div style="margin-bottom:8px"><strong>标题：</strong><?php echo h($vd['subject'] ?? '(无标题)'); ?></div>
+<div style="margin-bottom:8px;font-size:.9rem;color:var(--gray-500)">
+<strong>提交人：</strong><?php echo h($vd['user_nickname'] ?: $vd['user_email']); ?> &nbsp;|&nbsp;
+<strong>时间：</strong><?php echo $vd['created_at']; ?>
+<?php if ($vd['vhost_account']): ?>
+&nbsp;|&nbsp; <strong>关联主机：</strong><?php echo h($vd['model_name'].' - '.$vd['vhost_account']); ?>
+<?php endif; ?>
+</div>
+</div>
+<div style="border-top:1px solid var(--border-color);padding-top:16px">
+<?php foreach($vdReplyList as $r): $isAdminR = !empty($r['admin_id']); ?>
+<div style="margin-bottom:16px;padding:14px 16px;border-radius:10px;<?php echo $isAdminR ? 'background:linear-gradient(135deg,rgba(16,185,129,.08),rgba(5,150,105,.08));border-left:3px solid #10b981' : 'background:var(--gray-50);border-left:3px solid #0ea5e9' ?>">
+<div style="display:flex;justify-content:space-between;margin-bottom:6px">
+<span style="font-weight:600;font-size:.9rem"><?php echo $isAdminR ? '<i class="fas fa-user-shield"></i> 管理员 ('.h($r['admin_username']).')' : '<i class="fas fa-user"></i> '.h($r['user_nickname'] ?: '用户'); ?></span>
+<span style="font-size:.8rem;color:var(--gray-400)"><?php echo $r['created_at']; ?></span>
+</div>
+<div style="font-size:.9rem;line-height:1.7;word-break:break-all"><?php echo nl2br(h($r['content'])); ?></div>
+</div>
+<?php endforeach; ?>
+</div>
+<?php if ($vdStatus != 2): ?>
+<div style="border-top:1px solid var(--border-color);padding-top:16px;margin-top:8px">
+<form method="post">
+<?php echo csrfField(); ?>
+<input type="hidden" name="action" value="admin_reply_ticket">
+<input type="hidden" name="ticket_id" value="<?php echo $vd['id']; ?>">
+<div class="form-group">
+<label class="form-label">管理员回复</label>
+<textarea name="content" rows="4" required class="form-control" placeholder="输入回复内容..."></textarea>
+</div>
+<div style="display:flex;gap:10px">
+<button type="submit" class="btn btn-primary"><i class="fas fa-reply"></i> 回复</button>
+<button type="submit" name="action" value="close_ticket" class="btn btn-danger" onclick="return confirm('确定关闭此工单？')"><i class="fas fa-times-circle"></i> 回复并关闭</button>
+</div>
+</form>
+</div>
+<?php else: ?>
+<div style="text-align:center;padding:16px;color:var(--gray-400);border-top:1px solid var(--border-color);margin-top:8px">
+<i class="fas fa-lock" style="margin-right:6px"></i>此工单已关闭
+<form method="post" style="display:inline;margin-left:12px" onsubmit="return confirm('确定删除此工单？')">
+<?php echo csrfField(); ?>
+<input type="hidden" name="action" value="del_ticket">
+<input type="hidden" name="id" value="<?php echo $vd['id']; ?>">
+<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i> 删除</button>
+</form>
+</div>
+<?php endif; ?>
+</div>
+<?php else: ?>
+<div class="card"><div class="card-header"><h3>工单不存在</h3></div><p style="padding:20px;color:var(--gray-400)"><a href="?page=tickets">返回列表</a></p></div>
+<?php endif; ?>
+<?php else: ?>
+<div class="card">
+<div class="card-header">
+<h3 class="card-title"><i class="fas fa-headset"></i> 工单管理</h3>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<a href="?page=tickets&filter=all" class="btn btn-sm <?php echo $tkFilter==='all'?'btn-primary':'btn-outline'; ?>">全部</a>
+<a href="?page=tickets&filter=pending" class="btn btn-sm <?php echo $tkFilter==='pending'?'btn-warning':'btn-outline'; ?>">待处理 <?php if($tkPending>0) echo "({$tkPending})"; ?></a>
+<a href="?page=tickets&filter=replied" class="btn btn-sm <?php echo $tkFilter==='replied'?'btn-success':'btn-outline'; ?>">已回复</a>
+<a href="?page=tickets&filter=closed" class="btn btn-sm <?php echo $tkFilter==='closed'?'btn-outline':'btn-outline'; ?>">已关闭</a>
+</div>
+</div>
+<div style="padding:16px 20px;border-bottom:1px solid var(--border-color);background:var(--gray-50)">
+<form method="post" class="form-row" style="align-items:flex-end;margin:0">
+<?php echo csrfField(); ?>
+<input type="hidden" name="action" value="save_config">
+<div class="form-group" style="margin-bottom:0;flex:1;min-width:260px">
+<label class="form-label"><i class="fas fa-envelope"></i> 管理员工单提醒邮箱</label>
+<input type="email" name="admin_email" value="<?php echo h(conf('admin_email','')); ?>" class="form-control" placeholder="如：admin@example.com">
+</div>
+<div class="form-group" style="margin-bottom:0">
+<label class="form-label">新工单邮件提醒</label>
+<select name="admin_email_notify" class="form-control">
+<option value="1" <?php echo conf('admin_email_notify','1')==='1'?'selected':''; ?>>开启</option>
+<option value="0" <?php echo conf('admin_email_notify','1')!=='1'?'selected':''; ?>>关闭</option>
+</select>
+</div>
+<div style="display:flex;align-items:flex-end">
+<button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存</button>
+</div>
+<div class="form-tip" style="width:100%;margin-top:8px;margin-bottom:0">有新工单提交时，系统会自动向该邮箱发送提醒邮件（需先配置邮件服务）</div>
+</form>
+</div>
+<div class="table-wrapper">
+<table>
+<thead><tr><th>ID</th><th>标题</th><th>提交人</th><th>关联主机</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead>
+<tbody>
+<?php if(empty($tkList)): ?>
+<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--gray-400)"><i class="fas fa-headset" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>暂无工单</td></tr>
+<?php else: foreach($tkList as $tk): ?>
+<tr>
+<td>#<?php echo $tk['id']; ?></td>
+<td><?php echo h($tk['subject']); ?></td>
+<td><?php echo h($tk['user_nickname'] ?: substr($tk['user_email'],0,3).'***'); ?></td>
+<td><?php echo $tk['vhost_account'] ? h($tk['model_name'].' - '.$tk['vhost_account']) : '<span style="color:var(--gray-400)">-</span>'; ?></td>
+<td><span class="badge <?php echo $tkStatusBadge[$tk['status']]; ?>"><?php echo $tkStatusMap[$tk['status']]; ?></span></td>
+<td style="font-size:.85rem;color:var(--gray-400)"><?php echo date('Y-m-d H:i', strtotime($tk['updated_at'])); ?></td>
+<td>
+<a href="?page=tickets&view=<?php echo $tk['id']; ?>" class="btn btn-sm btn-primary"><i class="fas fa-eye"></i> 查看</a>
+<?php if($tk['status']!=2): ?>
+<form method="post" style="display:inline" onsubmit="return confirm('确定关闭？')">
+<?php echo csrfField(); ?>
+<input type="hidden" name="action" value="close_ticket">
+<input type="hidden" name="ticket_id" value="<?php echo $tk['id']; ?>">
+<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-times"></i></button>
+</form>
+<?php endif; ?>
+<form method="post" style="display:inline" onsubmit="return confirm('确定删除？')">
+<?php echo csrfField(); ?>
+<input type="hidden" name="action" value="del_ticket">
+<input type="hidden" name="id" value="<?php echo $tk['id']; ?>">
+<button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+</form>
+</td>
+</tr>
+<?php endforeach; endif; ?>
+</tbody>
+</table>
+</div>
+</div>
+<?php endif; ?>
+<?php endif; ?>
 
 <!-- 公告管理 -->
 <?php if($page==='announcement'): ?>
-<form method="post"><input type="hidden" name="action" value="save_announcement">
+<form method="post"><?php echo csrfField(); ?><input type="hidden" name="action" value="save_announcement">
 
 <div class="card">
 <div class="card-header">
@@ -2685,146 +2980,6 @@ foreach($coupons as $c):
 </div>
 
 </form>
-<?php endif; ?>
-
-<!-- 消费统计 -->
-<?php if($page==='statistics'): ?>
-<div class="card">
-<div class="card-header">
-<h3 class="card-title"><i class="fas fa-calendar"></i> 时间范围</h3>
-</div>
-<form method="get" class="form-row" style="align-items:flex-end">
-<input type="hidden" name="page" value="statistics">
-<div class="form-group">
-<label class="form-label">开始日期</label>
-<input type="date" name="start_date" value="<?php echo h($_GET['start_date'] ?? date('Y-m-01')); ?>" class="form-control">
-</div>
-<div class="form-group">
-<label class="form-label">结束日期</label>
-<input type="date" name="end_date" value="<?php echo h($_GET['end_date'] ?? date('Y-m-d')); ?>" class="form-control">
-</div>
-<div>
-<button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> 筛选</button>
-</div>
-</form>
-</div>
-
-<?php
-$startDate = $_GET['start_date'] ?? date('Y-m-01');
-$endDate = $_GET['end_date'] ?? date('Y-m-d');
-
-$orderStats = $DB->prepare("SELECT COUNT(*) as total_count, SUM(amount) as total_amount FROM orders WHERE status=1 AND created_at >= ? AND created_at <= ?");
-$orderStats->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-$orderData = $orderStats->fetch();
-
-$userConsume = $DB->prepare("SELECT u.id, u.email, u.nickname, COUNT(o.id) as order_count, SUM(o.amount) as total_spent FROM orders o LEFT JOIN users u ON o.user_id = u.id WHERE o.status = 1 AND o.created_at >= ? AND o.created_at <= ? GROUP BY u.id, u.email, u.nickname ORDER BY total_spent DESC LIMIT 20");
-$userConsume->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-$topUsers = $userConsume->fetchAll();
-
-$modelSales = $DB->prepare("SELECT vm.name, vm.price, COUNT(v.id) as sell_count, SUM(vm.price) as total_revenue FROM vhosts v LEFT JOIN vhost_models vm ON v.model_id = vm.id WHERE v.created_at >= ? AND v.created_at <= ? GROUP BY vm.name, vm.price ORDER BY sell_count DESC LIMIT 10");
-$modelSales->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-$topModels = $modelSales->fetchAll();
-
-$pointsConsume = $DB->prepare("SELECT SUM(points) as total_points FROM orders WHERE status = 1 AND created_at >= ? AND created_at <= ?");
-$pointsConsume->execute([$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-$pointsData = $pointsConsume->fetch();
-?>
-
-<div class="stats-grid">
-<div class="stat-card fade-in">
-<div class="icon users"><i class="fas fa-receipt"></i></div>
-<div class="num"><?php echo intval($orderData['total_count'] ?? 0); ?></div>
-<div class="label">订单总数</div>
-</div>
-<div class="stat-card fade-in" style="animation-delay:.1s">
-<div class="icon orders"><i class="fas fa-yen-sign"></i></div>
-<div class="num">¥<?php echo number_format($orderData['total_amount'] ?? 0, 2); ?></div>
-<div class="label">订单总金额</div>
-</div>
-<div class="stat-card fade-in" style="animation-delay:.2s">
-<div class="icon visits"><i class="fas fa-chart-bar"></i></div>
-<div class="num">¥<?php echo number_format($orderData['total_amount'] / max($orderData['total_count'], 1), 2); ?></div>
-<div class="label">平均客单价</div>
-</div>
-<div class="stat-card fade-in" style="animation-delay:.3s">
-<div class="icon vhosts"><i class="fas fa-coins"></i></div>
-<div class="num"><?php echo number_format($pointsData['total_points'] ?? 0); ?></div>
-<div class="label">积分消耗</div>
-</div>
-</div>
-
-<div class="card">
-<div class="card-header">
-<h3 class="card-title"><i class="fas fa-trophy"></i> 用户消费排行</h3>
-</div>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr>
-<th>排名</th>
-<th>用户</th>
-<th>订单数</th>
-<th>消费金额</th>
-</tr>
-</thead>
-<tbody>
-<?php $rank = 1; foreach($topUsers as $u): ?>
-<tr>
-<td>
-<?php if($rank == 1): ?><span style="color:#f59e0b;font-size:1.2rem">🥇</span>
-<?php elseif($rank == 2): ?><span style="font-size:1.1rem">🥈</span>
-<?php elseif($rank == 3): ?><span style="font-size:1rem">🥉</span>
-<?php else: ?><span style="color:var(--gray-500)"><?php echo $rank; ?></span><?php endif; ?>
-</td>
-<td><?php echo h($u['email'] ?? '已删除'); ?></td>
-<td><span class="badge badge-info"><?php echo $u['order_count']; ?> 单</span></td>
-<td><strong style="color:#059669;font-size:1.1rem">¥<?php echo number_format($u['total_spent'] ?? 0, 2); ?></strong></td>
-</tr>
-<?php $rank++; endforeach; ?>
-<?php if(empty($topUsers)): ?>
-<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--gray-500)">
-<i class="fas fa-inbox" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>
-暂无数据
-</td></tr>
-<?php endif; ?>
-</tbody>
-</table>
-</div>
-</div>
-
-<div class="card">
-<div class="card-header">
-<h3 class="card-title"><i class="fas fa-cube"></i> 主机销售排行</h3>
-</div>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr>
-<th>型号</th>
-<th>单价</th>
-<th>销量</th>
-<th>销售额</th>
-</tr>
-</thead>
-<tbody>
-<?php foreach($topModels as $m): ?>
-<tr>
-<td><strong><?php echo h($m['name'] ?? '已删除'); ?></strong></td>
-<td><span class="badge badge-purple"><?php echo $m['price']; ?> 积分</span></td>
-<td><?php echo $m['sell_count']; ?></td>
-<td><strong style="color:#059669"><?php echo number_format($m['total_revenue']); ?> 积分</strong></td>
-</tr>
-<?php endforeach; ?>
-<?php if(empty($topModels)): ?>
-<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--gray-500)">
-<i class="fas fa-inbox" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.5"></i>
-暂无数据
-</td></tr>
-<?php endif; ?>
-</tbody>
-</table>
-</div>
-</div>
 <?php endif; ?>
 
 <!-- 关于项目 -->
@@ -2859,17 +3014,17 @@ if ($checking) {
 <?php if($checking): ?>
 <div class="alert <?php echo $latestInfo ? 'alert-warning' : 'alert-success'; ?>" style="margin-top:24px;text-align:left">
 <?php if($latestInfo): ?>
-<i class="fas fa-bell"></i> 发现新版本 <strong><?php echo h($latestInfo['version']); ?></strong>，当前版本 <strong><?php echo h(conf('current_version','1.3.0')); ?></strong>。
+<i class="fas fa-bell"></i> 发现新版本 <strong><?php echo h($latestInfo['version']); ?></strong>，当前版本 <strong><?php echo h(conf('current_version','1.4.0')); ?></strong>。
 <?php if(!empty($latestInfo['release_note'])): ?><br><span style="opacity:.9"><?php echo nl2br(h($latestInfo['release_note'])); ?></span><?php endif; ?>
 <br><a href="<?php echo h($latestInfo['download_url']); ?>" target="_blank" class="btn btn-primary" style="margin-top:12px;background:#f59e0b;border-color:#f59e0b"><i class="fas fa-download"></i> 立即下载</a>
 <?php else: ?>
-<i class="fas fa-check-circle"></i> 当前已是最新版本 <strong><?php echo h(conf('current_version','1.3.0')); ?></strong>。
+<i class="fas fa-check-circle"></i> 当前已是最新版本 <strong><?php echo h(conf('current_version','1.4.0')); ?></strong>。
 <?php endif; ?>
 </div>
 <?php endif; ?>
 
 <div style="margin-top:30px;padding-top:20px;border-top:1px solid var(--gray-200);color:var(--gray-500);font-size:.85rem">
-<p style="margin:4px 0">当前版本：<?php echo h(conf('current_version','1.3.0')); ?></p>
+<p style="margin:4px 0">当前版本：<?php echo h(conf('current_version','1.4.0')); ?></p>
 <p style="margin:4px 0">更新接口：<?php echo h(conf('update_api_url','https://staridc.fangqihang.cn/api.php')); ?></p>
 </div>
 </div>
@@ -2878,5 +3033,8 @@ if ($checking) {
 
 </main>
 </div>
+<script>
+function toggleMenuGroup(el){var g=el.parentElement;g.classList.toggle('open')}
+</script>
 </body>
 </html>

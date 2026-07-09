@@ -95,6 +95,7 @@ renderHeader('找回密码');
 
         <?php if ($mode === 'request'): ?>
         <form method="post" class="auth-form" id="forgotForm">
+            <?php echo csrfField(); ?>
             <input type="hidden" name="action" value="send_code">
             <div class="form-group">
                 <label>注册邮箱</label>
@@ -113,6 +114,7 @@ renderHeader('找回密码');
         </form>
 
         <form method="post" class="auth-form" id="resetForm" style="margin-top:20px;display:none">
+            <?php echo csrfField(); ?>
             <input type="hidden" name="action" value="reset_password">
             <input type="hidden" name="email" id="reset_email">
             <div class="form-group">
@@ -165,9 +167,9 @@ document.getElementById('forgotForm').addEventListener('submit', function(e) {
             codeSent = true;
             document.getElementById('forgotForm').style.display = 'none';
             document.getElementById('resetForm').style.display = 'block';
-            alert(d.msg);
+            alert(d.message);
         } else {
-            alert(d.msg);
+            alert(d.message);
         }
     })
     .catch(function(){alert('请求失败');});
@@ -188,7 +190,7 @@ document.getElementById('resendBtn').addEventListener('click', function() {
     .then(function(r){return r.json()})
     .then(function(d){
         if(d.code === 200) {
-            alert(d.msg);
+            alert(d.message);
             var c = 60;
             btn.textContent = c + 's';
             var t = setInterval(function() {
@@ -201,7 +203,7 @@ document.getElementById('resendBtn').addEventListener('click', function() {
                 }
             }, 1000);
         } else {
-            alert(d.msg);
+            alert(d.message);
             btn.disabled = false;
             btn.textContent = '重新发送';
         }
