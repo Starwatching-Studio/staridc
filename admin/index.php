@@ -1184,14 +1184,14 @@ $dPointsData = $dPointsConsume->fetch();
 <!-- 系统配置 -->
 <?php if($page==='config'): ?>
 <div class="tabs">
-<a class="tab active" onclick="showTab('tab-mnbt')"><i class="fas fa-server"></i> MNBT对接</a>
-<a class="tab" onclick="showTab('tab-pay')"><i class="fas fa-credit-card"></i> 支付接口</a>
-<a class="tab" onclick="showTab('tab-mail')"><i class="fas fa-envelope"></i> 邮件服务</a>
-<a class="tab" onclick="showTab('tab-oauth')"><i class="fas fa-users-cog"></i> 聚合登录</a>
-<a class="tab" onclick="showTab('tab-site')"><i class="fas fa-cog"></i> 网站设置</a>
+<a class="tab active" onclick="showTab('tab-mnbt', this)"><i class="fas fa-server"></i> MNBT对接</a>
+<a class="tab" onclick="showTab('tab-pay', this)"><i class="fas fa-credit-card"></i> 支付接口</a>
+<a class="tab" onclick="showTab('tab-mail', this)"><i class="fas fa-envelope"></i> 邮件服务</a>
+<a class="tab" onclick="showTab('tab-oauth', this)"><i class="fas fa-users-cog"></i> 聚合登录</a>
+<a class="tab" onclick="showTab('tab-site', this)"><i class="fas fa-cog"></i> 网站设置</a>
 </div>
 
-<form method="post"><?php echo csrfField(); ?><input type="hidden" name="action" value="save_config">
+<form method="post" id="configForm"><?php echo csrfField(); ?><input type="hidden" name="action" value="save_config">
 
 <div id="tab-mnbt" class="tab-content active">
 <div class="card">
@@ -1228,10 +1228,11 @@ $dPointsData = $dPointsConsume->fetch();
 </div>
 </div>
 <div style="display:flex;gap:12px;margin-top:24px">
-<button type="button" class="btn btn-outline" onclick="this.form.action.value='test_mnbt';this.form.submit()"><i class="fas fa-plug"></i> 测试连接</button>
-<button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存配置</button>
+<button type="submit" name="action" value="test_mnbt" class="btn btn-outline"><i class="fas fa-plug"></i> 测试连接</button>
+<button type="submit" name="action" value="save_config" class="btn btn-primary"><i class="fas fa-save"></i> 保存配置</button>
 </div>
 </div>
+</form>
 
 <div class="card" style="margin-top:20px">
 <div class="card-header">
@@ -1406,6 +1407,7 @@ function closeEditServer(){
 </script>
 
 <div id="tab-pay" class="tab-content">
+<form method="post"><?php echo csrfField(); ?><input type="hidden" name="action" value="save_config">
 <div class="card">
 <div class="card-header">
 <h3 class="card-title"><i class="fas fa-credit-card"></i> 易支付配置</h3>
@@ -1427,8 +1429,10 @@ function closeEditServer(){
 <button type="submit" class="btn btn-primary" style="margin-top:24px"><i class="fas fa-save"></i> 保存配置</button>
 </div>
 </div>
+</form>
 
 <div id="tab-mail" class="tab-content">
+<form method="post"><?php echo csrfField(); ?><input type="hidden" name="action" value="save_config">
 <div class="card">
 <div class="card-header">
 <h3 class="card-title"><i class="fas fa-envelope"></i> 邮件服务配置</h3>
@@ -1517,15 +1521,17 @@ function closeEditServer(){
 <input type="email" name="test_email" class="form-control" placeholder="输入测试邮箱地址">
 </div>
 <div class="form-group" style="display:flex;align-items:flex-end">
-<button type="button" class="btn btn-outline" onclick="this.form.action.value='test_mail';this.form.submit()"><i class="fas fa-paper-plane"></i> 发送测试邮件</button>
+<button type="submit" name="action" value="test_mail" class="btn btn-outline"><i class="fas fa-paper-plane"></i> 发送测试邮件</button>
 </div>
 </div>
 </div>
 <button type="submit" class="btn btn-primary" style="margin-top:24px"><i class="fas fa-save"></i> 保存配置</button>
 </div>
 </div>
+</form>
 
 <div id="tab-oauth" class="tab-content">
+<form method="post"><?php echo csrfField(); ?><input type="hidden" name="action" value="save_config">
 <div class="card">
 <div class="card-header">
 <h3 class="card-title"><i class="fas fa-users-cog"></i> 彩虹聚合登录配置</h3>
@@ -1606,8 +1612,10 @@ foreach ($customIconTypes as $ck => $cv):
 <button type="submit" class="btn btn-primary" style="margin-top:24px"><i class="fas fa-save"></i> 保存配置</button>
 </div>
 </div>
+</form>
 
 <div id="tab-site" class="tab-content">
+<form method="post"><?php echo csrfField(); ?><input type="hidden" name="action" value="save_config">
 <div class="card">
 <div class="card-header">
 <h3 class="card-title"><i class="fas fa-cog"></i> 网站设置</h3>
@@ -1662,7 +1670,6 @@ foreach($themes as $key => $t): ?>
 <button type="submit" class="btn btn-primary" style="margin-top:24px"><i class="fas fa-save"></i> 保存配置</button>
 </div>
 </div>
-
 </form>
 
 <script>
