@@ -55,7 +55,7 @@
 - Email registration/login with **email verification codes**
 - **OAuth aggregate login**: Support QQ, WeChat, Alipay, Weibo, Baidu, TikTok, Huawei, Xiaomi, Google, Microsoft, DingTalk, Feishu, Gitee, GitHub and more
 - Login lockout mechanism (5 failed attempts locks for 15 minutes)
-- **"Remember me"** auto-login (7-day validity)
+- **"Remember me"** auto-login (30-day validity)
 - Password recovery
 - Email domain whitelist restriction
 - User dashboard supports binding/unbinding third-party accounts
@@ -74,6 +74,7 @@
 - **Ticket Management**: View/reply/close/delete user tickets
 - **Announcement**: Homepage popup announcements
 - **Consumption Stats**: Order data analysis
+- **Domain Check**: Query domain site info via BT Panel API
 - **About Project**: Version check, sponsor entry
 
 ### 🎨 Theme System
@@ -164,6 +165,17 @@ The system supports connecting to multiple MNBT servers. Add them in Admin → S
 
 > After adding servers, assign the corresponding server to each hosting plan in plan management.
 
+#### BT Panel Configuration (Domain Check)
+
+The domain check feature queries site info via BT Panel API. Configure in Admin → System Config → BT Panel:
+
+| Setting | Description |
+| ------- | ----------- |
+| Panel URL | BT Panel access URL |
+| API Key | Login to BT Panel → Panel Settings → API Interface → Get Key |
+
+> After obtaining the key, add your server IP to the BT Panel API whitelist.
+
 #### Payment Gateway Configuration
 
 | Setting | Description |
@@ -193,6 +205,27 @@ Configure in Admin → Pricing:
 | Registration Points | 100 | Points given to new users |
 | Referral Points | 50 | Points for successful referral |
 | Points Packages | Custom | Multiple top-up tiers with points ratio |
+
+### Purchase Limit Configuration
+
+Configure in Admin → Pricing:
+
+| Setting | Default | Description |
+| ------- | :-----: | ----------- |
+| Max Hosts Per User | 5 | Global limit: total hosts a user can purchase (0 = unlimited) |
+
+Each plan can also set its own purchase limit in **Hosting Plan** management for finer control. If a plan has no limit set, only the global limit applies.
+
+### Recharge Package Configuration
+
+Customize points top-up tiers in Admin → Recharge Packages:
+
+| Setting | Description |
+| ------- | ----------- |
+| Points | Points the user receives after purchase |
+| Price | Corresponding RMB amount (CNY) |
+| Sort Order | Display order of packages |
+| Status | List/unlist control |
 
 ### OAuth Aggregate Login Configuration
 
