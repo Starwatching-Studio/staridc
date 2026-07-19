@@ -1,0 +1,8 @@
+# 禁止上传目录执行任何脚本，防止上传的恶意文件被直接执行
+php_flag engine off
+Options -ExecCGI
+AddType text/plain .php .phtml .pht .phps .phar .cgi .pl .py .asp .aspx .jsp
+
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7|phps|pht|phar|cgi|pl|py|asp|aspx|jsp|sh|html|htm)$">
+    Require all denied
+</FilesMatch>

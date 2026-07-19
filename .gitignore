@@ -1,0 +1,10 @@
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+*.zip
+_release_body.txt
+官网（同步时不同步该文件夹）/
+config.php
+data/
+mail/vendor/
